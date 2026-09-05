@@ -32,4 +32,36 @@ La representación 3D en Blender, los recorridos por pasillos y los planos ofici
 
 ## Evidencia y verificación
 
-Las pruebas de regresión y de navegador se ejecutan antes y después de cada cambio. Las capturas y mediciones finales se guardan en `docs/evidence/`; la matriz de aceptación registra también lo no verificado. No se declara integración física, push real a otros dispositivos ni lectura a tres metros sin una comprobación real.
+La evidencia resumida de la validación local está en [`evidence/validation.json`](evidence/validation.json). Se guardan resultados reales y nombres de pruebas, no trazas con cookies ni archivos `.env`. Los artefactos detallados de Playwright quedan ignorados en `test-results/`.
+
+## Correcciones de estabilización
+
+- Ajustes renderiza capacidades del navegador sin discrepancias de hidratación.
+- Entradas API inválidas reciben 400; sesiones ausentes y encabezados de rol falsificados no autorizan escrituras.
+- Sesión de demo firmada en servidor: origen correcto incluso en `127.0.0.1`, revalidación previa a mutaciones locales y protección frente a respuestas tardías tras logout.
+- Motor, reloj, escenarios, eventos y acuses restaurados al recargar; identificadores nuevos incluyen UUID de sesión.
+- Escenario de aforo independiente del horario y CO₂ continuo a través del cambio de hora; curvas anteriores conservan su escenario.
+- Caché separa documentos, RSC y API. La aplicación congela el reloj al no confirmar conectividad y conserva el estado guardado para lectura.
+- UI de visualizador bloquea acuses y guardado de planos; contactos/horario y simulador verifican sesión antes de escribir.
+- Configuración local reproducible y documentación de variables Vercel, límites de demo y canales no implementados.
+
+## Cobertura comprobada localmente
+
+| Área                                          | Comprobación                                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Reglas, simulador, API, sesión y persistencia | Suite Vitest completa                                                                                   |
+| Compilación                                   | Lint, TypeScript y build de producción                                                                  |
+| Acceso administrativo                         | Login real vía navegador, inyección y acuse; pérdida de cookie impide escribir sin recarga              |
+| Historial y CSV                               | IDs conservados al recargar; CSV de diez columnas con evento y acuse                                    |
+| Offline                                       | Recarga desde caché, JSON 503 en API, reloj congelado y recuperación con conexión                       |
+| Rutas                                         | Ocho rutas de escritorio, aliases de dashboard/configuración y Ajustes sin errores de hidratación       |
+| Móvil                                         | Inicio, aula L-419 y Ajustes sin desbordamiento horizontal a 390 × 844                                  |
+| Monitor                                       | Valores principales de la pantalla A-1001 de al menos 32 px; no equivale a lectura física a tres metros |
+
+Se usa Chrome del sistema, Node 24 y el build de producción en Windows. Esta comprobación no certifica todos los navegadores ni un despliegue remoto. No se ha ejecutado una revisión por otro agente/modelo.
+
+## No incluido / límites
+
+No se integra Blender, hardware, MQTT, planos oficiales, distribución push multiusuario, correo, Telegram, cuentas institucionales ni base de datos central. El PIN compartido no sustituye autenticación de producción ni control de intentos. Cuotas de almacenamiento, cierre abrupto y conflictos entre pestañas no tienen garantía de recuperación. La prueba offline es emulación de navegador, no un ensayo físico en todos los dispositivos.
+
+La entrega es rama + PR para revisión. No se fusiona `main` ni se publica producción; un preview de Vercel requiere configurar las variables indicadas en el README y una validación posterior en HTTPS.

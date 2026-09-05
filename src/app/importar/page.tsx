@@ -17,10 +17,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PlanoSvg, type PlanoImportado } from "@/components/plano/plano-svg";
-import { parsePlano, PLANTILLA_CSV, PLANTILLA_JSON, type ResultadoImport } from "@/lib/plano/import";
+import {
+  parsePlano,
+  PLANTILLA_CSV,
+  PLANTILLA_JSON,
+  type ResultadoImport,
+} from "@/lib/plano/import";
 import { saveLocal } from "@/lib/data/storage";
 import { getAula } from "@/lib/simulator/profiles";
-import { CODIGOS_AULA } from "@/lib/store";
+import { CODIGOS_AULA, useApp } from "@/lib/store";
+import { useOnline } from "@/lib/use-online";
 import type { AulaCodigo } from "@/lib/types";
 
 function descargar(nombre: string, contenido: string, tipo: string) {
@@ -34,8 +40,13 @@ function descargar(nombre: string, contenido: string, tipo: string) {
 }
 
 export default function ImportarPage() {
+  const admin = useApp((s) => s.rol === "administrador");
+  const online = useOnline();
+  const authorizeWrite = useApp((s) => s.authorizeWrite);
   const [aula, setAula] = useState<AulaCodigo>("L-419");
-  const [resultado, setResultado] = useState<(ResultadoImport & { nombre: string }) | null>(null);
+  const [resultado, setResultado] = useState<
+    (ResultadoImport & { nombre: string }) | null
+  >(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const onArchivo = async (file: File) => {
@@ -44,15 +55,19 @@ export default function ImportarPage() {
       const r = parsePlano(file.name, texto);
       setResultado({ ...r, nombre: file.name });
       if (r.aviso) toast.info(r.aviso);
-      toast.success(`Contorno leído: ${r.puntos.length} puntos (${r.origen.toUpperCase()}).`);
+      toast.success(
+        `Contorno leído: ${r.puntos.length} puntos (${r.origen.toUpperCase()}).`,
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo leer el archivo.");
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo leer el archivo.",
+      );
       setResultado(null);
     }
   };
 
-  const guardar = () => {
-    if (!resultado) return;
+  const guardar = async () => {
+    if (!resultado || !admin || !online || !(await authorizeWrite())) return;
     const plano: PlanoImportado = {
       puntos: resultado.puntos,
       nombre: resultado.nombre,
@@ -69,9 +84,10 @@ export default function ImportarPage() {
         <h1 className="text-xl font-semibold">Importar plano</h1>
       </div>
       <p className="text-sm text-muted-foreground">
-        Sube el contorno del aula como <strong>CSV</strong> (un punto “x,y” por línea, en metros),{" "}
-        <strong>DXF</strong> (solo entidades LINE y LWPOLYLINE) o <strong>JSON</strong> (polígono).
-        Se muestra una vista previa y puedes guardarlo para el plano del aula.
+        Sube el contorno del aula como <strong>CSV</strong> (un punto “x,y” por
+        línea, en metros), <strong>DXF</strong> (solo entidades LINE y
+        LWPOLYLINE) o <strong>JSON</strong> (polígono). Se muestra una vista
+        previa y puedes guardarlo para el plano del aula.
       </p>
 
       <Card>
@@ -102,19 +118,29 @@ export default function ImportarPage() {
               e.target.value = "";
             }}
           />
-          <Button onClick={() => inputRef.current?.click()}>Elegir archivo…</Button>
+          <Button onClick={() => inputRef.current?.click()}>
+            Elegir archivo…
+          </Button>
           <div className="ml-auto flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => descargar("plantilla_plano.csv", PLANTILLA_CSV, "text/csv")}
+              onClick={() =>
+                descargar("plantilla_plano.csv", PLANTILLA_CSV, "text/csv")
+              }
             >
               <DownloadIcon className="size-4" aria-hidden /> Plantilla CSV
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => descargar("plantilla_plano.json", PLANTILLA_JSON, "application/json")}
+              onClick={() =>
+                descargar(
+                  "plantilla_plano.json",
+                  PLANTILLA_JSON,
+                  "application/json",
+                )
+              }
             >
               <DownloadIcon className="size-4" aria-hidden /> Plantilla JSON
             </Button>
@@ -131,7 +157,11 @@ export default function ImportarPage() {
             <>
               <PlanoSvg
                 aula={getAula(aula)}
-                plano={{ puntos: resultado.puntos, nombre: resultado.nombre, origen: resultado.origen }}
+                plano={{
+                  puntos: resultado.puntos,
+                  nombre: resultado.nombre,
+                  origen: resultado.origen,
+                }}
                 className="w-full"
               />
               <p className="mt-2 text-xs text-muted-foreground">
@@ -148,7 +178,7 @@ export default function ImportarPage() {
       </Card>
 
       <div className="flex items-center gap-3">
-        <Button onClick={guardar} disabled={!resultado}>
+        <Button onClick={guardar} disabled={!resultado || !admin || !online}>
           Guardar plano para {aula}
         </Button>
         <Link href={`/aula/${aula}`} className="text-sm underline">

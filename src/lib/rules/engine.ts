@@ -45,6 +45,20 @@ interface EstadoInterno {
   abiertos: Evento[]; // open out-of-nominal events
 }
 
+export interface EngineSnapshot {
+  version: 1;
+  sessionId: string;
+  seq: number;
+  states: [
+    AulaCodigo,
+    Omit<EstadoInterno, "condiciones" | "ultimoValor" | "ultimoLatido"> & {
+      condiciones: [string, Condicion][];
+      ultimoValor: [string, number | EstadoPuerta][];
+      ultimoLatido: [NodoId, number][];
+    },
+  ][];
+}
+
 const MIN = 60_000;
 
 function parseTs(ts: string): number {
@@ -57,6 +71,7 @@ export class RuleEngine {
   private aulas: Aula[];
   private estados = new Map<AulaCodigo, EstadoInterno>();
   private seq = 0;
+  private sessionId: string = crypto.randomUUID();
 
   constructor(opts: { umbrales: Umbrales; horario: Horario; aulas: Aula[] }) {
     this.umbrales = opts.umbrales;
@@ -75,6 +90,62 @@ export class RuleEngine {
         abiertos: [],
       });
     }
+  }
+
+  snapshot(): EngineSnapshot {
+    return structuredClone({
+      version: 1,
+      sessionId: this.sessionId,
+      seq: this.seq,
+      states: [...this.estados.entries()].map(([code, state]) => [
+        code,
+        {
+          ...state,
+          condiciones: [...state.condiciones],
+          ultimoValor: [...state.ultimoValor],
+          ultimoLatido: [...state.ultimoLatido],
+        },
+      ]),
+    } as EngineSnapshot);
+  }
+
+  restore(snapshot: EngineSnapshot): void {
+    if (
+      snapshot.version !== 1 ||
+      !snapshot.sessionId ||
+      !Array.isArray(snapshot.states)
+    )
+      throw new Error("Estado de simulación inválido.");
+    const restored = new Map<AulaCodigo, EstadoInterno>();
+    for (const [code, stored] of snapshot.states) {
+      if (!this.estados.has(code))
+        throw new Error("Aula no válida en el estado guardado.");
+      const state = structuredClone(stored);
+      const open = new Map(
+        state.abiertos.map((event) => [event.id_evento, event]),
+      );
+      restored.set(code, {
+        ...state,
+        condiciones: new Map(
+          state.condiciones.map(([key, condition]) => [
+            key,
+            {
+              ...condition,
+              abierto: condition.abierto
+                ? (open.get(condition.abierto.id_evento) ?? null)
+                : null,
+            },
+          ]),
+        ),
+        ultimoValor: new Map(state.ultimoValor),
+        ultimoLatido: new Map(state.ultimoLatido),
+      });
+    }
+    if (restored.size !== this.estados.size)
+      throw new Error("Faltan aulas en el estado guardado.");
+    this.sessionId = snapshot.sessionId;
+    this.seq = snapshot.seq;
+    this.estados = restored;
   }
 
   setUmbrales(u: Umbrales) {
@@ -120,7 +191,7 @@ export class RuleEngine {
     const ev: Evento = {
       ts: isoLima(new Date(fechaMs)),
       aula,
-      id_evento: `EV-${String(this.seq).padStart(5, "0")}`,
+      id_evento: `EV-${this.sessionId}-${String(this.seq).padStart(5, "0")}`,
       tipo,
       severidad: cat.severidad,
       fuente,
@@ -144,7 +215,15 @@ export class RuleEngine {
     valor: string,
     umbral: string,
   ): EngineEmit {
-    const ev = this.nuevoEvento(aula, tipo, fechaMs, fuente, valor, umbral, "motorReglas");
+    const ev = this.nuevoEvento(
+      aula,
+      tipo,
+      fechaMs,
+      fuente,
+      valor,
+      umbral,
+      "motorReglas",
+    );
     const cond = st.condiciones.get(key)!;
     cond.abierto = ev;
     st.abiertos.push(ev);
@@ -152,7 +231,12 @@ export class RuleEngine {
     return { accion: "abrir", evento: ev };
   }
 
-  private cerrarCond(st: EstadoInterno, aula: AulaCodigo, key: string, fechaMs: number): EngineEmit | null {
+  private cerrarCond(
+    st: EstadoInterno,
+    aula: AulaCodigo,
+    key: string,
+    fechaMs: number,
+  ): EngineEmit | null {
     const cond = st.condiciones.get(key);
     if (!cond?.abierto) return null;
     const ev = cond.abierto;
@@ -160,7 +244,10 @@ export class RuleEngine {
     cond.abierto = null;
     cond.desde = null;
     st.abiertos = st.abiertos.filter((e) => e.id_evento !== ev.id_evento);
-    const copia = { ...ev, estado_resultante: this.getEstado(aula, new Date(fechaMs)) };
+    const copia = {
+      ...ev,
+      estado_resultante: this.getEstado(aula, new Date(fechaMs)),
+    };
     return { accion: "cerrar", evento: copia };
   }
 
@@ -197,7 +284,9 @@ export class RuleEngine {
     if (predicado) {
       if (cond.desde === null) cond.desde = fechaMs;
       if (fechaMs - cond.desde >= persistenciaMs) {
-        emits.push(this.abrir(st, aula, key, tipo, fechaMs, fuente, valor, umbral));
+        emits.push(
+          this.abrir(st, aula, key, tipo, fechaMs, fuente, valor, umbral),
+        );
       }
     } else {
       cond.desde = null;
@@ -225,17 +314,28 @@ export class RuleEngine {
     const tMs = parseTs(m.ts);
     const fecha = new Date(tMs);
     const emits: EngineEmit[] = [];
-    st.ultimoValor.set(m.magnitud === "proximidad_ventana" ? `${m.magnitud}:${m.nodo}` : m.magnitud, m.valor);
+    st.ultimoValor.set(
+      m.magnitud === "proximidad_ventana"
+        ? `${m.magnitud}:${m.nodo}`
+        : m.magnitud,
+      m.valor,
+    );
 
     switch (m.magnitud) {
       case "temperatura": {
         const v = m.valor as number;
         this.evaluar(
-          st, m.aula, "temp", "temperatura_fuera_confort", tMs,
+          st,
+          m.aula,
+          "temp",
+          "temperatura_fuera_confort",
+          tMs,
           v > u.umbralTemp,
           v <= u.umbralTemp - u.umbralTempHisteresis,
           u.umbralTempPersistenciaMin * MIN,
-          m.nodo, `${v} °C`, `> ${u.umbralTemp} °C por ${u.umbralTempPersistenciaMin} min`,
+          m.nodo,
+          `${v} °C`,
+          `> ${u.umbralTemp} °C por ${u.umbralTempPersistenciaMin} min`,
           emits,
         );
         break;
@@ -243,11 +343,17 @@ export class RuleEngine {
       case "humedad": {
         const v = m.valor as number;
         this.evaluar(
-          st, m.aula, "hr", "hr_fuera_confort", tMs,
+          st,
+          m.aula,
+          "hr",
+          "hr_fuera_confort",
+          tMs,
           v < u.hrMin || v > u.hrMax,
           v >= u.hrMin + 2 && v <= u.hrMax - 2,
           u.hrPersistenciaMin * MIN,
-          m.nodo, `${v} %`, `fuera de ${u.hrMin}-${u.hrMax} % por ${u.hrPersistenciaMin} min`,
+          m.nodo,
+          `${v} %`,
+          `fuera de ${u.hrMin}-${u.hrMax} % por ${u.hrPersistenciaMin} min`,
           emits,
         );
         break;
@@ -255,17 +361,31 @@ export class RuleEngine {
       case "co2": {
         const v = m.valor as number;
         this.evaluar(
-          st, m.aula, "co2_aviso", "co2_aviso", tMs,
-          v >= u.co2Aviso, v < u.co2Aviso - 50,
+          st,
+          m.aula,
+          "co2_aviso",
+          "co2_aviso",
+          tMs,
+          v >= u.co2Aviso,
+          v < u.co2Aviso - 50,
           u.co2PersistenciaMin * MIN,
-          m.nodo, `${v} ppm`, `>= ${u.co2Aviso} ppm por ${u.co2PersistenciaMin} min`,
+          m.nodo,
+          `${v} ppm`,
+          `>= ${u.co2Aviso} ppm por ${u.co2PersistenciaMin} min`,
           emits,
         );
         this.evaluar(
-          st, m.aula, "co2_alerta", "co2_alerta", tMs,
-          v >= u.co2Alerta, v < u.co2Alerta - 50,
+          st,
+          m.aula,
+          "co2_alerta",
+          "co2_alerta",
+          tMs,
+          v >= u.co2Alerta,
+          v < u.co2Alerta - 50,
           u.co2PersistenciaMin * MIN,
-          m.nodo, `${v} ppm`, `>= ${u.co2Alerta} ppm por ${u.co2PersistenciaMin} min`,
+          m.nodo,
+          `${v} ppm`,
+          `>= ${u.co2Alerta} ppm por ${u.co2PersistenciaMin} min`,
           emits,
         );
         break;
@@ -273,10 +393,17 @@ export class RuleEngine {
       case "pm25": {
         const v = m.valor as number;
         this.evaluar(
-          st, m.aula, "pm25", "pm25_alto", tMs,
-          v > u.pm25Max, v <= u.pm25Max - 3,
+          st,
+          m.aula,
+          "pm25",
+          "pm25_alto",
+          tMs,
+          v > u.pm25Max,
+          v <= u.pm25Max - 3,
           u.pm25PersistenciaMin * MIN,
-          m.nodo, `${v} µg/m³`, `> ${u.pm25Max} µg/m³ por ${u.pm25PersistenciaMin} min`,
+          m.nodo,
+          `${v} µg/m³`,
+          `> ${u.pm25Max} µg/m³ por ${u.pm25PersistenciaMin} min`,
           emits,
         );
         break;
@@ -284,10 +411,17 @@ export class RuleEngine {
       case "ruido": {
         const v = m.valor as number;
         this.evaluar(
-          st, m.aula, "ruido", "ruido_excesivo", tMs,
-          v > u.umbralRuido, v <= u.umbralRuido - 3,
+          st,
+          m.aula,
+          "ruido",
+          "ruido_excesivo",
+          tMs,
+          v > u.umbralRuido,
+          v <= u.umbralRuido - 3,
           1 * MIN, // LAeq window of 1 minute
-          m.nodo, `${v} dBA`, `> ${u.umbralRuido} dBA (LAeq 1 min)`,
+          m.nodo,
+          `${v} dBA`,
+          `> ${u.umbralRuido} dBA (LAeq 1 min)`,
           emits,
         );
         break;
@@ -296,16 +430,31 @@ export class RuleEngine {
         const v = m.valor as number;
         const enClase = claseEnCurso(this.horario, m.aula, fecha);
         this.evaluar(
-          st, m.aula, "lux", "iluminacion_insuficiente", tMs,
-          enClase && v < u.umbralLux, !enClase || v >= u.umbralLux + 30,
+          st,
+          m.aula,
+          "lux",
+          "iluminacion_insuficiente",
+          tMs,
+          enClase && v < u.umbralLux,
+          !enClase || v >= u.umbralLux + 30,
           u.luxPersistenciaMin * MIN,
-          m.nodo, `${v} lx`, `< ${u.umbralLux} lx en clase por ${u.luxPersistenciaMin} min (objetivo ${u.luxObjetivo} lx)`,
+          m.nodo,
+          `${v} lx`,
+          `< ${u.umbralLux} lx en clase por ${u.luxPersistenciaMin} min (objetivo ${u.luxObjetivo} lx)`,
           emits,
         );
         // nominal light on/off transitions
         const luzOn = v >= 150;
         if (st.luzPrev !== null && luzOn !== st.luzPrev) {
-          emits.push(this.info(m.aula, luzOn ? "luz_encendida" : "luz_apagada", tMs, m.nodo, `${v} lx`));
+          emits.push(
+            this.info(
+              m.aula,
+              luzOn ? "luz_encendida" : "luz_apagada",
+              tMs,
+              m.nodo,
+              `${v} lx`,
+            ),
+          );
         }
         st.luzPrev = luzOn;
         break;
@@ -315,15 +464,30 @@ export class RuleEngine {
         const cfg = this.aulas.find((a) => a.codigo === m.aula)!;
         const aforo = Math.min(u.aforoMaximo, cfg.aforo);
         this.evaluar(
-          st, m.aula, "aforo", "aforo_excedido", tMs,
-          v > aforo, v <= aforo,
+          st,
+          m.aula,
+          "aforo",
+          "aforo_excedido",
+          tMs,
+          v > aforo,
+          v <= aforo,
           0, // capacity violations open immediately
-          m.nodo, `${v} personas`, `> ${aforo} personas`,
+          m.nodo,
+          `${v} personas`,
+          `> ${aforo} personas`,
           emits,
         );
         if (st.ocupacionPrev !== null && v !== st.ocupacionPrev) {
           const tipo: TipoEvento = v > st.ocupacionPrev ? "ingreso" : "egreso";
-          emits.push(this.info(m.aula, tipo, tMs, "nodoPuerta", `${st.ocupacionPrev} -> ${v}`));
+          emits.push(
+            this.info(
+              m.aula,
+              tipo,
+              tMs,
+              "nodoPuerta",
+              `${st.ocupacionPrev} -> ${v}`,
+            ),
+          );
         }
         st.ocupacionPrev = v;
         break;
@@ -338,15 +502,28 @@ export class RuleEngine {
           if (e) emits.push(e);
         }
         const enClase = claseEnCurso(this.horario, m.aula, fecha);
-        const maxMin = enClase ? u.puertaAbiertaMaxEnClaseMin : u.puertaAbiertaMaxFueraHorarioMin;
+        const maxMin = enClase
+          ? u.puertaAbiertaMaxEnClaseMin
+          : u.puertaAbiertaMaxFueraHorarioMin;
         this.evaluar(
-          st, m.aula, "puerta", "puerta_abierta", tMs,
-          v === "abierta", v !== "abierta",
+          st,
+          m.aula,
+          "puerta",
+          "puerta_abierta",
+          tMs,
+          v === "abierta",
+          v !== "abierta",
           maxMin * MIN,
-          m.nodo, v, `abierta > ${maxMin} min ${enClase ? "en clase" : "fuera de horario"}`,
+          m.nodo,
+          v,
+          `abierta > ${maxMin} min ${enClase ? "en clase" : "fuera de horario"}`,
           emits,
         );
-        if (st.puertaPrev !== null && v === "asegurada" && st.puertaPrev !== "asegurada") {
+        if (
+          st.puertaPrev !== null &&
+          v === "asegurada" &&
+          st.puertaPrev !== "asegurada"
+        ) {
           emits.push(this.info(m.aula, "puerta_asegurada", tMs, m.nodo, v));
         }
         st.puertaPrev = v;
@@ -355,13 +532,22 @@ export class RuleEngine {
       case "proximidad_ventana": {
         const v = m.valor as number;
         const enClase = claseEnCurso(this.horario, m.aula, fecha);
-        const ocup = (st.ultimoValor.get("ocupacion") as number | undefined) ?? 0;
-        const vigilancia = !enHorarioOperacion(fecha) || (!enClase && ocup === 0);
+        const ocup =
+          (st.ultimoValor.get("ocupacion") as number | undefined) ?? 0;
+        const vigilancia =
+          !enHorarioOperacion(fecha) || (!enClase && ocup === 0);
         this.evaluar(
-          st, m.aula, `prox:${m.nodo}`, "proximidad_ventana", tMs,
-          vigilancia && v < u.distVentana, v >= u.distVentanaHisteresis || !vigilancia,
+          st,
+          m.aula,
+          `prox:${m.nodo}`,
+          "proximidad_ventana",
+          tMs,
+          vigilancia && v < u.distVentana,
+          v >= u.distVentanaHisteresis || !vigilancia,
           u.distVentanaPersistenciaSeg * 1000,
-          m.nodo, `${v} m`, `< ${u.distVentana} m por ${u.distVentanaPersistenciaSeg} s (libera a ${u.distVentanaHisteresis} m)`,
+          m.nodo,
+          `${v} m`,
+          `< ${u.distVentana} m por ${u.distVentanaPersistenciaSeg} s (libera a ${u.distVentanaHisteresis} m)`,
           emits,
         );
         break;
@@ -369,10 +555,17 @@ export class RuleEngine {
       case "bateria": {
         const v = m.valor as number;
         this.evaluar(
-          st, m.aula, `bat:${m.nodo}`, "bateria_baja", tMs,
-          v < u.bateriaBaja, v >= u.bateriaBaja + 5,
+          st,
+          m.aula,
+          `bat:${m.nodo}`,
+          "bateria_baja",
+          tMs,
+          v < u.bateriaBaja,
+          v >= u.bateriaBaja + 5,
           0,
-          m.nodo, `${v} %`, `< ${u.bateriaBaja} %`,
+          m.nodo,
+          `${v} %`,
+          `< ${u.bateriaBaja} %`,
           emits,
         );
         break;
@@ -380,7 +573,8 @@ export class RuleEngine {
       case "latido": {
         st.ultimoLatido.set(m.nodo, tMs);
         // node back online closes its nodo_sin_datos / procesador_offline
-        const key = m.nodo === "procesadorAula" ? "procesador" : `latido:${m.nodo}`;
+        const key =
+          m.nodo === "procesadorAula" ? "procesador" : `latido:${m.nodo}`;
         const e = this.cerrarCond(st, m.aula, key, tMs);
         if (e) emits.push(e);
         break;
@@ -405,7 +599,15 @@ export class RuleEngine {
 
       const enClase = claseEnCurso(this.horario, aula, fecha);
       if (st.enClasePrev !== null && enClase !== st.enClasePrev) {
-        emits.push(this.info(aula, enClase ? "inicio_clase" : "fin_clase", fechaMs, "horario", ""));
+        emits.push(
+          this.info(
+            aula,
+            enClase ? "inicio_clase" : "fin_clase",
+            fechaMs,
+            "horario",
+            "",
+          ),
+        );
       }
       st.enClasePrev = enClase;
 
@@ -415,18 +617,32 @@ export class RuleEngine {
         if (ultimo === undefined) continue;
         if (nodo === "procesadorAula") {
           this.evaluar(
-            st, aula, "procesador", "procesador_offline", fechaMs,
-            fechaMs - ultimo > u.procesadorOfflineSeg * 1000, false,
+            st,
+            aula,
+            "procesador",
+            "procesador_offline",
+            fechaMs,
+            fechaMs - ultimo > u.procesadorOfflineSeg * 1000,
+            false,
             0,
-            "servidorGemelo", `${Math.round((fechaMs - ultimo) / 1000)} s sin latido`, `> ${u.procesadorOfflineSeg} s`,
+            "servidorGemelo",
+            `${Math.round((fechaMs - ultimo) / 1000)} s sin latido`,
+            `> ${u.procesadorOfflineSeg} s`,
             emits,
           );
         } else {
           this.evaluar(
-            st, aula, `latido:${nodo}`, "nodo_sin_datos", fechaMs,
-            fechaMs - ultimo > u.nodoSinDatosMin * MIN, false,
+            st,
+            aula,
+            `latido:${nodo}`,
+            "nodo_sin_datos",
+            fechaMs,
+            fechaMs - ultimo > u.nodoSinDatosMin * MIN,
+            false,
             0,
-            nodo, `${Math.round((fechaMs - ultimo) / MIN)} min sin latido`, `> ${u.nodoSinDatosMin} min (latido cada ${u.latidoMin} min)`,
+            nodo,
+            `${Math.round((fechaMs - ultimo) / MIN)} min sin latido`,
+            `> ${u.nodoSinDatosMin} min (latido cada ${u.latidoMin} min)`,
             emits,
           );
         }
@@ -436,7 +652,12 @@ export class RuleEngine {
   }
 
   /** Acknowledge an open event. Returns the updated event, or null if not found. */
-  acusar(aula: AulaCodigo, idEvento: string, actor: string, fechaMs: number): Evento | null {
+  acusar(
+    aula: AulaCodigo,
+    idEvento: string,
+    actor: string,
+    fechaMs: number,
+  ): Evento | null {
     const st = this.estados.get(aula);
     if (!st) return null;
     const ev = st.abiertos.find((e) => e.id_evento === idEvento);
@@ -451,11 +672,25 @@ export class RuleEngine {
   }
 
   /** Manually inject a catalog event (simulator UI, admin only). */
-  inyectar(aula: AulaCodigo, tipo: TipoEvento, fechaMs: number, actor: string): EngineEmit {
+  inyectar(
+    aula: AulaCodigo,
+    tipo: TipoEvento,
+    fechaMs: number,
+    actor: string,
+  ): EngineEmit {
     const st = this.estados.get(aula)!;
     const cat = CATALOGO_EVENTOS[tipo];
-    if (cat.severidad === "info") return this.info(aula, tipo, fechaMs, "inyeccionManual", "", actor);
-    const ev = this.nuevoEvento(aula, tipo, fechaMs, "inyeccionManual", "inyectado", "", actor);
+    if (cat.severidad === "info")
+      return this.info(aula, tipo, fechaMs, "inyeccionManual", "", actor);
+    const ev = this.nuevoEvento(
+      aula,
+      tipo,
+      fechaMs,
+      "inyeccionManual",
+      "inyectado",
+      "",
+      actor,
+    );
     st.abiertos.push(ev);
     ev.estado_resultante = this.getEstado(aula, new Date(fechaMs));
     return { accion: "abrir", evento: ev };

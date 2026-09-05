@@ -6,7 +6,13 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { BellIcon, ClockIcon, Settings2Icon, ShieldCheckIcon, UsersIcon } from "lucide-react";
+import {
+  BellIcon,
+  ClockIcon,
+  Settings2Icon,
+  ShieldCheckIcon,
+  UsersIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -28,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useApp, CODIGOS_AULA, PIN_ADMIN } from "@/lib/store";
+import { useApp, CODIGOS_AULA } from "@/lib/store";
 import { loadLocal, saveLocal } from "@/lib/data/storage";
 import { DIAS_SEMANA } from "@/lib/schedule";
 import {
@@ -39,6 +45,7 @@ import {
   suscripcionActual,
 } from "@/lib/notify/push-client";
 import type { AulaCodigo, BloqueHorario, Horario, Umbrales } from "@/lib/types";
+import { useOnline } from "@/lib/use-online";
 
 interface CampoUmbral {
   key: keyof Umbrales;
@@ -51,7 +58,10 @@ const GRUPOS_UMBRALES: { titulo: string; campos: CampoUmbral[] }[] = [
     campos: [
       { key: "umbralTemp", etiqueta: "Temperatura máx (°C)" },
       { key: "umbralTempHisteresis", etiqueta: "Histéresis temperatura (°C)" },
-      { key: "umbralTempPersistenciaMin", etiqueta: "Persistencia temperatura (min)" },
+      {
+        key: "umbralTempPersistenciaMin",
+        etiqueta: "Persistencia temperatura (min)",
+      },
       { key: "hrMin", etiqueta: "Humedad mín (%)" },
       { key: "hrMax", etiqueta: "Humedad máx (%)" },
       { key: "hrPersistenciaMin", etiqueta: "Persistencia humedad (min)" },
@@ -83,8 +93,14 @@ const GRUPOS_UMBRALES: { titulo: string; campos: CampoUmbral[] }[] = [
     titulo: "Aforo y accesos",
     campos: [
       { key: "aforoMaximo", etiqueta: "Aforo máximo (personas)" },
-      { key: "puertaAbiertaMaxEnClaseMin", etiqueta: "Puerta abierta máx en clase (min)" },
-      { key: "puertaAbiertaMaxFueraHorarioMin", etiqueta: "Puerta abierta máx fuera de horario (min)" },
+      {
+        key: "puertaAbiertaMaxEnClaseMin",
+        etiqueta: "Puerta abierta máx en clase (min)",
+      },
+      {
+        key: "puertaAbiertaMaxFueraHorarioMin",
+        etiqueta: "Puerta abierta máx fuera de horario (min)",
+      },
     ],
   },
   {
@@ -115,9 +131,15 @@ const subscribeToCapabilities = () => () => {};
 const serverPushSnapshot = () => false;
 
 export default function AjustesPage() {
-  const supportsPush = useSyncExternalStore(subscribeToCapabilities, pushSoportado, serverPushSnapshot);
+  const supportsPush = useSyncExternalStore(
+    subscribeToCapabilities,
+    pushSoportado,
+    serverPushSnapshot,
+  );
   const rol = useApp((s) => s.rol);
   const setRol = useApp((s) => s.setRol);
+  const login = useApp((s) => s.login);
+  const authorizeWrite = useApp((s) => s.authorizeWrite);
   const sonido = useApp((s) => s.sonido);
   const setSonido = useApp((s) => s.setSonido);
   const umbrales = useApp((s) => s.umbrales);
@@ -125,22 +147,29 @@ export default function AjustesPage() {
   const horario = useApp((s) => s.horario);
   const setHorario = useApp((s) => s.setHorario);
 
-  const esAdmin = rol === "administrador";
+  const online = useOnline();
+  const esAdmin = rol === "administrador" && online;
   const [pin, setPin] = useState("");
   const [dialogoPin, setDialogoPin] = useState(false);
   const [borrador, setBorrador] = useState<Record<string, string>>({});
   const [horarioBorrador, setHorarioBorrador] = useState<Horario | null>(null);
-  const [contactos, setContactos] = useState<Contactos>({ moderador: "", seguridad: "" });
+  const [contactos, setContactos] = useState<Contactos>({
+    moderador: "",
+    seguridad: "",
+  });
   const [pushActivo, setPushActivo] = useState(false);
 
   useEffect(() => {
     // client-only reads after mount (SSR renders defaults)
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setContactos(loadLocal<Contactos>("contactos", { moderador: "", seguridad: "" }));
+    setContactos(
+      loadLocal<Contactos>("contactos", { moderador: "", seguridad: "" }),
+    );
     void suscripcionActual().then((s) => setPushActivo(Boolean(s)));
   }, []);
 
-  const valorCampo = (k: keyof Umbrales): string => borrador[k] ?? String(umbrales[k]);
+  const valorCampo = (k: keyof Umbrales): string =>
+    borrador[k] ?? String(umbrales[k]);
 
   const guardarUmbrales = async () => {
     const nuevos = { ...umbrales };
@@ -157,22 +186,37 @@ export default function AjustesPage() {
     // the API authorizes and validates (criterio 7: rejects non-admin writes)
     const res = await fetch("/api/umbrales", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-rol": rol },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(nuevos),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      toast.error(data?.error ?? `La API rechazó el cambio (HTTP ${res.status}).`);
+    }).catch(() => null);
+    if (!res) {
+      toast.error("Sin conexión: no se guardaron los cambios.");
       return;
     }
-    setUmbrales(nuevos, "administrador");
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      toast.error(
+        data?.error ?? `La API rechazó el cambio (HTTP ${res.status}).`,
+      );
+      return;
+    }
+    if (!(await setUmbrales(nuevos, "administrador"))) return;
     setBorrador({});
     toast.success("Umbrales guardados y registrados en el log.");
   };
 
   const h = horarioBorrador ?? horario;
-  const editarBloque = (aula: AulaCodigo, i: number, cambio: Partial<BloqueHorario>) => {
-    const copia: Horario = { ...h, [aula]: h[aula].map((b, j) => (j === i ? { ...b, ...cambio } : b)) };
+  const editarBloque = (
+    aula: AulaCodigo,
+    i: number,
+    cambio: Partial<BloqueHorario>,
+  ) => {
+    const copia: Horario = {
+      ...h,
+      [aula]: h[aula].map((b, j) => (j === i ? { ...b, ...cambio } : b)),
+    };
     setHorarioBorrador(copia);
   };
   const quitarBloque = (aula: AulaCodigo, i: number) => {
@@ -181,24 +225,30 @@ export default function AjustesPage() {
   const agregarBloque = (aula: AulaCodigo) => {
     setHorarioBorrador({
       ...h,
-      [aula]: [...h[aula], { dia: 1, inicio: "08:00", fin: "10:00", curso: "Nuevo curso" }],
+      [aula]: [
+        ...h[aula],
+        { dia: 1, inicio: "08:00", fin: "10:00", curso: "Nuevo curso" },
+      ],
     });
   };
-  const guardarHorario = () => {
+  const guardarHorario = async () => {
     for (const a of CODIGOS_AULA) {
       for (const b of h[a]) {
         if (b.inicio >= b.fin) {
-          toast.error(`Bloque inválido en ${a}: "${b.curso}" empieza ${b.inicio} y termina ${b.fin}.`);
+          toast.error(
+            `Bloque inválido en ${a}: "${b.curso}" empieza ${b.inicio} y termina ${b.fin}.`,
+          );
           return;
         }
       }
     }
-    setHorario(h, "administrador");
+    if (!(await setHorario(h, "administrador"))) return;
     setHorarioBorrador(null);
     toast.success("Horario guardado y registrado en el log.");
   };
 
-  const guardarContactos = () => {
+  const guardarContactos = async () => {
+    if (!(await authorizeWrite())) return;
     saveLocal("contactos", contactos);
     toast.success("Contactos guardados.");
   };
@@ -209,7 +259,9 @@ export default function AjustesPage() {
       setPushActivo(true);
       toast.success("Notificaciones push activadas en este navegador.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo activar el push.");
+      toast.error(
+        e instanceof Error ? e.message : "No se pudo activar el push.",
+      );
     }
   };
 
@@ -232,7 +284,11 @@ export default function AjustesPage() {
             Rol actual: <strong className="capitalize">{rol}</strong>
           </p>
           {esAdmin ? (
-            <Button variant="outline" size="sm" onClick={() => setRol("visualizador")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRol("visualizador")}
+            >
               Volver a visualizador
             </Button>
           ) : (
@@ -244,8 +300,9 @@ export default function AjustesPage() {
                 <DialogHeader>
                   <DialogTitle>PIN de administrador</DialogTitle>
                   <DialogDescription>
-                    El rol administrador permite editar umbrales, horario y usar el simulador.
-                    (Fase 1: selector simulado con PIN; fase 2: cuentas reales.)
+                    El rol administrador permite editar umbrales, horario y usar
+                    el simulador. (Fase 1: selector simulado con PIN; fase 2:
+                    cuentas reales.)
                   </DialogDescription>
                 </DialogHeader>
                 <Input
@@ -258,15 +315,14 @@ export default function AjustesPage() {
                 />
                 <DialogFooter>
                   <Button
-                    onClick={() => {
-                      if (pin === PIN_ADMIN) {
-                        setRol("administrador");
-                        setDialogoPin(false);
-                        setPin("");
-                        toast.success("Ahora eres administrador.");
-                      } else {
-                        toast.error("PIN incorrecto.");
-                      }
+                    onClick={async () => {
+                      const error = await login(pin);
+                      if (error) return void toast.error(error);
+                      setDialogoPin(false);
+                      setPin("");
+                      toast.success(
+                        "Rol administrador de demostración activado.",
+                      );
                     }}
                   >
                     Confirmar
@@ -276,9 +332,9 @@ export default function AjustesPage() {
             </Dialog>
           )}
           <p className="w-full text-xs text-muted-foreground">
-            El rol visualizador solo lee: la interfaz bloquea la edición y la API rechaza sus
-            escrituras. Las credenciales se guardan únicamente como hash; nunca se registran
-            imágenes ni identidades.
+            El rol visualizador solo lee: la interfaz bloquea la edición y la
+            API rechaza sus escrituras. Este PIN es solo para demostración; no
+            sustituye las cuentas reales. La app no captura imágenes ni audio.
           </p>
         </CardContent>
       </Card>
@@ -325,7 +381,11 @@ export default function AjustesPage() {
                 </Button>
               </>
             ) : (
-              <Button size="sm" onClick={activarPush} disabled={!supportsPush}>
+              <Button
+                size="sm"
+                onClick={activarPush}
+                disabled={!supportsPush || !esAdmin}
+              >
                 Activar notificaciones push
               </Button>
             )}
@@ -336,7 +396,8 @@ export default function AjustesPage() {
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Canales adicionales (correo, Telegram) quedan listos como adaptadores para la fase 2.
+            Canales adicionales (correo, Telegram) quedan listos como
+            adaptadores para la fase 2.
           </p>
         </CardContent>
       </Card>
@@ -344,7 +405,9 @@ export default function AjustesPage() {
       {/* thresholds */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Umbrales de confort y seguridad</CardTitle>
+          <CardTitle className="text-base">
+            Umbrales de confort y seguridad
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {!esAdmin && (
@@ -357,7 +420,10 @@ export default function AjustesPage() {
               <legend className="mb-1 text-sm font-medium">{g.titulo}</legend>
               {g.campos.map((c) => (
                 <div key={c.key} className="flex flex-col gap-1">
-                  <Label htmlFor={c.key} className="text-xs text-muted-foreground">
+                  <Label
+                    htmlFor={c.key}
+                    className="text-xs text-muted-foreground"
+                  >
                     {c.etiqueta}
                   </Label>
                   <Input
@@ -367,7 +433,9 @@ export default function AjustesPage() {
                     min={0}
                     disabled={!esAdmin}
                     value={valorCampo(c.key)}
-                    onChange={(e) => setBorrador((b) => ({ ...b, [c.key]: e.target.value }))}
+                    onChange={(e) =>
+                      setBorrador((b) => ({ ...b, [c.key]: e.target.value }))
+                    }
                   />
                 </div>
               ))}
@@ -397,7 +465,9 @@ export default function AjustesPage() {
                   <div key={i} className="flex flex-wrap items-center gap-2">
                     <Select
                       value={String(b.dia)}
-                      onValueChange={(v) => editarBloque(a, i, { dia: Number(v) })}
+                      onValueChange={(v) =>
+                        editarBloque(a, i, { dia: Number(v) })
+                      }
                       disabled={!esAdmin}
                     >
                       <SelectTrigger className="w-32" aria-label="Día">
@@ -416,7 +486,9 @@ export default function AjustesPage() {
                       className="w-28"
                       value={b.inicio}
                       disabled={!esAdmin}
-                      onChange={(e) => editarBloque(a, i, { inicio: e.target.value })}
+                      onChange={(e) =>
+                        editarBloque(a, i, { inicio: e.target.value })
+                      }
                       aria-label="Hora de inicio"
                     />
                     <Input
@@ -424,25 +496,38 @@ export default function AjustesPage() {
                       className="w-28"
                       value={b.fin}
                       disabled={!esAdmin}
-                      onChange={(e) => editarBloque(a, i, { fin: e.target.value })}
+                      onChange={(e) =>
+                        editarBloque(a, i, { fin: e.target.value })
+                      }
                       aria-label="Hora de fin"
                     />
                     <Input
                       className="w-48 flex-1"
                       value={b.curso}
                       disabled={!esAdmin}
-                      onChange={(e) => editarBloque(a, i, { curso: e.target.value })}
+                      onChange={(e) =>
+                        editarBloque(a, i, { curso: e.target.value })
+                      }
                       aria-label="Curso"
                     />
                     {esAdmin && (
-                      <Button variant="ghost" size="sm" onClick={() => quitarBloque(a, i)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => quitarBloque(a, i)}
+                      >
                         Quitar
                       </Button>
                     )}
                   </div>
                 ))}
                 {esAdmin && (
-                  <Button variant="outline" size="sm" className="w-fit" onClick={() => agregarBloque(a)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-fit"
+                    onClick={() => agregarBloque(a)}
+                  >
                     + Agregar bloque
                   </Button>
                 )}
@@ -450,7 +535,10 @@ export default function AjustesPage() {
             </div>
           ))}
           <div>
-            <Button onClick={guardarHorario} disabled={!esAdmin || !horarioBorrador}>
+            <Button
+              onClick={guardarHorario}
+              disabled={!esAdmin || !horarioBorrador}
+            >
               Guardar horario
             </Button>
           </div>
@@ -461,13 +549,17 @@ export default function AjustesPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
-            <UsersIcon className="size-4" aria-hidden /> Contactos de notificación
+            <UsersIcon className="size-4" aria-hidden /> Contactos de
+            notificación
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <Label htmlFor="moderador" className="text-xs text-muted-foreground">
+              <Label
+                htmlFor="moderador"
+                className="text-xs text-muted-foreground"
+              >
                 Moderador (aforo excedido)
               </Label>
               <Input
@@ -476,11 +568,16 @@ export default function AjustesPage() {
                 placeholder="moderador@utec.edu.pe"
                 value={contactos.moderador}
                 disabled={!esAdmin}
-                onChange={(e) => setContactos((c) => ({ ...c, moderador: e.target.value }))}
+                onChange={(e) =>
+                  setContactos((c) => ({ ...c, moderador: e.target.value }))
+                }
               />
             </div>
             <div className="flex flex-col gap-1">
-              <Label htmlFor="seguridad" className="text-xs text-muted-foreground">
+              <Label
+                htmlFor="seguridad"
+                className="text-xs text-muted-foreground"
+              >
                 Seguridad (proximidad a ventana)
               </Label>
               <Input
@@ -489,7 +586,9 @@ export default function AjustesPage() {
                 placeholder="seguridad@utec.edu.pe"
                 value={contactos.seguridad}
                 disabled={!esAdmin}
-                onChange={(e) => setContactos((c) => ({ ...c, seguridad: e.target.value }))}
+                onChange={(e) =>
+                  setContactos((c) => ({ ...c, seguridad: e.target.value }))
+                }
               />
             </div>
           </div>
@@ -499,8 +598,8 @@ export default function AjustesPage() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            En fase 1 los contactos solo se guardan localmente; el envío real de correo/Telegram
-            llega con la fase 2.
+            En fase 1 los contactos solo se guardan localmente; el envío real de
+            correo/Telegram llega con la fase 2.
           </p>
         </CardContent>
       </Card>

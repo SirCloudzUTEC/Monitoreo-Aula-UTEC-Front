@@ -30,7 +30,8 @@ export class PushChannel implements NotificationChannel {
 
   async enviar(payload: NotificacionPayload): Promise<boolean> {
     try {
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg?.active) return false;
       const sub = await reg.pushManager.getSubscription();
       if (!sub) return false;
       const res = await fetch("/api/push/send", {
@@ -80,6 +81,10 @@ export const CANALES: NotificationChannel[] = [
   new TelegramChannel(),
 ];
 
-export async function notificarTodos(payload: NotificacionPayload): Promise<void> {
-  await Promise.all(CANALES.filter((c) => c.disponible()).map((c) => c.enviar(payload)));
+export async function notificarTodos(
+  payload: NotificacionPayload,
+): Promise<void> {
+  await Promise.all(
+    CANALES.filter((c) => c.disponible()).map((c) => c.enviar(payload)),
+  );
 }

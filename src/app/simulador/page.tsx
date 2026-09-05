@@ -4,7 +4,12 @@
 // speed 1×/10×/60×, pause/resume and manual event injection.
 
 import Link from "next/link";
-import { PauseIcon, PlayIcon, SlidersHorizontalIcon, ZapIcon } from "lucide-react";
+import {
+  PauseIcon,
+  PlayIcon,
+  SlidersHorizontalIcon,
+  ZapIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { useOnline } from "@/lib/use-online";
 import { CATALOGO_EVENTOS, TIPOS_FUERA_NOMINAL } from "@/lib/events/catalog";
 import { horaLarga } from "@/lib/format";
 import type { AulaCodigo, Escenario, TipoEvento, Velocidad } from "@/lib/types";
@@ -32,6 +38,7 @@ const ESCENARIOS: Record<Escenario, string> = {
 
 export default function SimuladorPage() {
   const rol = useApp((s) => s.rol);
+  const online = useOnline();
   const escenarios = useApp((s) => s.escenarios);
   const setEscenario = useApp((s) => s.setEscenario);
   const velocidad = useApp((s) => s.velocidad);
@@ -43,14 +50,17 @@ export default function SimuladorPage() {
   const [aulaIny, setAulaIny] = useState<AulaCodigo>("L-419");
   const [tipoIny, setTipoIny] = useState<TipoEvento>("aforo_excedido");
 
-  if (rol !== "administrador") {
+  if (rol !== "administrador" || !online) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
-        <SlidersHorizontalIcon className="mx-auto mb-4 size-10 text-muted-foreground" aria-hidden />
+        <SlidersHorizontalIcon
+          className="mx-auto mb-4 size-10 text-muted-foreground"
+          aria-hidden
+        />
         <h1 className="text-xl font-semibold">Simulador</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Esta sección es solo para el rol <strong>administrador</strong>. Cambia de rol con el PIN
-          en{" "}
+          Esta sección es solo para el rol <strong>administrador</strong>.
+          Cambia de rol con el PIN en{" "}
           <Link href="/ajustes" className="underline">
             Ajustes
           </Link>
@@ -70,8 +80,9 @@ export default function SimuladorPage() {
         </span>
       </div>
       <p className="text-sm text-muted-foreground">
-        La simulación corre sola al abrir la app (modo automático). Aquí puedes cambiar el
-        escenario de cada aula, acelerar el tiempo o inyectar un evento puntual.
+        La simulación corre sola al abrir la app (modo automático). Aquí puedes
+        cambiar el escenario de cada aula, acelerar el tiempo o inyectar un
+        evento puntual.
       </p>
 
       <Card>
@@ -79,7 +90,10 @@ export default function SimuladorPage() {
           <CardTitle className="text-base">Reloj de simulación</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
-          <Button variant={corriendo ? "outline" : "default"} onClick={() => setCorriendo(!corriendo)}>
+          <Button
+            variant={corriendo ? "outline" : "default"}
+            onClick={() => setCorriendo(!corriendo)}
+          >
             {corriendo ? (
               <>
                 <PauseIcon className="size-4" aria-hidden /> Pausar
@@ -90,7 +104,11 @@ export default function SimuladorPage() {
               </>
             )}
           </Button>
-          <div className="flex items-center gap-1" role="group" aria-label="Velocidad">
+          <div
+            className="flex items-center gap-1"
+            role="group"
+            aria-label="Velocidad"
+          >
             {([1, 10, 60] as Velocidad[]).map((v) => (
               <Button
                 key={v}
@@ -103,7 +121,8 @@ export default function SimuladorPage() {
             ))}
           </div>
           <span className="text-xs text-muted-foreground">
-            A ×60, 1 minuto real = 1 hora simulada (útil para probar persistencias de 10 min).
+            A ×60, 1 minuto real = 1 hora simulada (útil para probar
+            persistencias de 10 min).
           </span>
         </CardContent>
       </Card>
@@ -116,8 +135,14 @@ export default function SimuladorPage() {
           {CODIGOS_AULA.map((a) => (
             <div key={a} className="flex items-center gap-3">
               <span className="w-20 font-medium">{a}</span>
-              <Select value={escenarios[a]} onValueChange={(v) => setEscenario(a, v as Escenario)}>
-                <SelectTrigger className="w-56" aria-label={`Escenario de ${a}`}>
+              <Select
+                value={escenarios[a]}
+                onValueChange={(v) => setEscenario(a, v as Escenario)}
+              >
+                <SelectTrigger
+                  className="w-56"
+                  aria-label={`Escenario de ${a}`}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -131,8 +156,9 @@ export default function SimuladorPage() {
             </div>
           ))}
           <p className="text-xs text-muted-foreground">
-            El escenario cambia las señales simuladas (ocupación, CO₂, puerta, etc.); las alertas
-            aparecen cuando la condición persiste el tiempo configurado en los umbrales.
+            El escenario cambia las señales simuladas (ocupación, CO₂, puerta,
+            etc.); las alertas aparecen cuando la condición persiste el tiempo
+            configurado en los umbrales.
           </p>
         </CardContent>
       </Card>
@@ -142,7 +168,10 @@ export default function SimuladorPage() {
           <CardTitle className="text-base">Inyectar evento</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
-          <Select value={aulaIny} onValueChange={(v) => setAulaIny(v as AulaCodigo)}>
+          <Select
+            value={aulaIny}
+            onValueChange={(v) => setAulaIny(v as AulaCodigo)}
+          >
             <SelectTrigger className="w-28" aria-label="Aula">
               <SelectValue />
             </SelectTrigger>
@@ -154,7 +183,10 @@ export default function SimuladorPage() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={tipoIny} onValueChange={(v) => setTipoIny(v as TipoEvento)}>
+          <Select
+            value={tipoIny}
+            onValueChange={(v) => setTipoIny(v as TipoEvento)}
+          >
             <SelectTrigger className="w-64" aria-label="Tipo de evento">
               <SelectValue />
             </SelectTrigger>
@@ -170,8 +202,8 @@ export default function SimuladorPage() {
             <ZapIcon className="size-4" aria-hidden /> Inyectar
           </Button>
           <p className="w-full text-xs text-muted-foreground">
-            El evento inyectado se abre de inmediato (fuente: inyección manual) y se cierra al
-            acusar recibo en{" "}
+            El evento inyectado se abre de inmediato (fuente: inyección manual)
+            y se cierra al acusar recibo en{" "}
             <Link href="/alertas" className="underline">
               Alertas
             </Link>

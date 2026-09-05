@@ -54,13 +54,22 @@ export async function guardarLogRows(rows: LogRow[]): Promise<void> {
   if (rows.length === 0) return;
   const db = await openDb();
   if (!db) return;
-  try {
-    const tx = db.transaction(STORE_LOG, "readwrite");
-    const store = tx.objectStore(STORE_LOG);
-    for (const r of rows) store.put(r);
-  } catch {
-    // best-effort persistence
-  }
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      db.close();
+      resolve();
+    };
+    try {
+      const tx = db.transaction(STORE_LOG, "readwrite");
+      tx.oncomplete = finish;
+      tx.onabort = finish;
+      tx.onerror = finish;
+      const store = tx.objectStore(STORE_LOG);
+      for (const row of rows) store.put(row);
+    } catch {
+      finish();
+    }
+  });
 }
 
 export async function cargarLogRows(): Promise<LogRow[]> {
@@ -70,9 +79,20 @@ export async function cargarLogRows(): Promise<LogRow[]> {
     try {
       const tx = db.transaction(STORE_LOG, "readonly");
       const req = tx.objectStore(STORE_LOG).getAll();
-      req.onsuccess = () => resolve((req.result as LogRow[]) ?? []);
-      req.onerror = () => resolve([]);
+      tx.oncomplete = () => {
+        db.close();
+        resolve((req.result as LogRow[]) ?? []);
+      };
+      tx.onabort = () => {
+        db.close();
+        resolve([]);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve([]);
+      };
     } catch {
+      db.close();
       resolve([]);
     }
   });
@@ -81,9 +101,19 @@ export async function cargarLogRows(): Promise<LogRow[]> {
 export async function borrarLog(): Promise<void> {
   const db = await openDb();
   if (!db) return;
-  try {
-    db.transaction(STORE_LOG, "readwrite").objectStore(STORE_LOG).clear();
-  } catch {
-    // ignore
-  }
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      db.close();
+      resolve();
+    };
+    try {
+      const tx = db.transaction(STORE_LOG, "readwrite");
+      tx.oncomplete = finish;
+      tx.onabort = finish;
+      tx.onerror = finish;
+      tx.objectStore(STORE_LOG).clear();
+    } catch {
+      finish();
+    }
+  });
 }

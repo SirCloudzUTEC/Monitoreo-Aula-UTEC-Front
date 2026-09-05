@@ -10,6 +10,7 @@ import { useApp, estaEscalado } from "@/lib/store";
 import { fechaHoraDeIso } from "@/lib/format";
 import type { Evento, Severidad } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useOnline } from "@/lib/use-online";
 
 const CLASE_SEVERIDAD: Record<Severidad, string> = {
   info: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
@@ -23,8 +24,16 @@ export const ETIQUETA_SEVERIDAD: Record<Severidad, string> = {
   critico: "Crítico",
 };
 
-export function EventoCard({ evento, abierta = false }: { evento: Evento; abierta?: boolean }) {
+export function EventoCard({
+  evento,
+  abierta = false,
+}: {
+  evento: Evento;
+  abierta?: boolean;
+}) {
   const acusar = useApp((s) => s.acusar);
+  const canWrite = useApp((s) => s.rol === "administrador");
+  const online = useOnline();
   const simNowMs = useApp((s) => s.simNowMs);
   const cat = CATALOGO_EVENTOS[evento.tipo];
   const escalado = abierta && estaEscalado(evento, simNowMs);
@@ -54,28 +63,44 @@ export function EventoCard({ evento, abierta = false }: { evento: Evento; abiert
       <p className="mt-1 text-sm text-muted-foreground">{cat.descripcion}</p>
       {(evento.valor || evento.umbral) && (
         <p className="mt-1 text-xs text-muted-foreground">
-          {evento.valor && <>Valor: <span className="font-mono">{evento.valor}</span></>}
+          {evento.valor && (
+            <>
+              Valor: <span className="font-mono">{evento.valor}</span>
+            </>
+          )}
           {evento.valor && evento.umbral && " · "}
-          {evento.umbral && <>Umbral: <span className="font-mono">{evento.umbral}</span></>}
+          {evento.umbral && (
+            <>
+              Umbral: <span className="font-mono">{evento.umbral}</span>
+            </>
+          )}
         </p>
       )}
       {escalado && (
         <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-400">
-          ⚠ Escalada: más de 10 minutos sin acuse de recibo. Se notifica al siguiente responsable.
+          ⚠ Escalada: 10 minutos sin acuse. Contacta al responsable; en esta
+          fase no se envía correo ni Telegram.
         </p>
       )}
       {abierta && (
         <div className="mt-2 flex items-center gap-2">
           {evento.acuse ? (
             <span className="text-xs text-emerald-700 dark:text-emerald-400">
-              ✓ Acusado por {evento.acuse.actor} ({fechaHoraDeIso(evento.acuse.ts)})
+              ✓ Acusado por {evento.acuse.actor} (
+              {fechaHoraDeIso(evento.acuse.ts)})
             </span>
           ) : (
             <>
-              <Button size="sm" onClick={() => acusar(evento.aula, evento.id_evento)}>
+              <Button
+                size="sm"
+                disabled={!canWrite || !online}
+                onClick={() => acusar(evento.aula, evento.id_evento)}
+              >
                 Acusar recibo
               </Button>
-              <span className="text-xs text-muted-foreground">{cat.accion}</span>
+              <span className="text-xs text-muted-foreground">
+                {cat.accion}
+              </span>
             </>
           )}
         </div>

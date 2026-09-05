@@ -1,16 +1,19 @@
-// POST /api/push/subscribe — acknowledges a browser subscription.
-// Phase 1 is stateless: the subscription lives in the browser (service worker)
-// and /api/push/send receives it explicitly. Phase 2: persist it server-side
-// keyed by contact so the notifier can fan out to all administrators.
-
 import { NextRequest, NextResponse } from "next/server";
+import { isAdministrator, sameOrigin } from "@/lib/auth/session";
+import { validSubscription } from "@/lib/notify/validation";
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = (await req.json()) as { endpoint?: string };
-    if (!body.endpoint) return NextResponse.json({ error: "Falta endpoint" }, { status: 400 });
-    return NextResponse.json({ ok: true }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
+  if (!sameOrigin(req) || !isAdministrator(req))
+    return NextResponse.json({ error: "Solo administrador." }, { status: 403 });
+  const body: unknown = await req.json().catch(() => null);
+  if (!validSubscription(body))
+    return NextResponse.json(
+      { error: "Suscripción push inválida o proveedor no permitido." },
+      { status: 400 },
+    );
+  // Phase 1: browser-owned subscription, no cross-device registry.
+  return NextResponse.json(
+    { ok: true, scope: "este_navegador" },
+    { status: 201 },
+  );
 }

@@ -20,12 +20,26 @@ import type {
   Umbrales,
   Velocidad,
 } from "@/lib/types";
-import { RuleEngine, type EngineEmit } from "@/lib/rules/engine";
+import {
+  RuleEngine,
+  type EngineEmit,
+  type EngineSnapshot,
+} from "@/lib/rules/engine";
 import { HORARIO_DEFAULT } from "@/lib/schedule";
-import { SimulatedDataSource, TICK_MS, type DataSource } from "@/lib/data/data-source";
+import {
+  SimulatedDataSource,
+  TICK_MS,
+  type DataSource,
+  type ScenarioTransition,
+} from "@/lib/data/data-source";
 import { aplicarRetencion, type LogRow } from "@/lib/events/log";
 import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
-import { cargarLogRows, guardarLogRows, loadLocal, saveLocal } from "@/lib/data/storage";
+import {
+  cargarLogRows,
+  guardarLogRows,
+  loadLocal,
+  saveLocal,
+} from "@/lib/data/storage";
 import { notificarTodos } from "@/lib/notify/channels";
 import { isoLima } from "@/lib/simulator/generator";
 import aulasSeed from "@/data/aulas.json";
@@ -35,16 +49,31 @@ export const AULAS = aulasSeed as Aula[];
 export const CODIGOS_AULA = AULAS.map((a) => a.codigo);
 
 /** Admin PIN for the simulated role selector (phase 1; real auth hook in phase 2). */
-export const PIN_ADMIN = "2026";
+// Demo PIN is validated server-side; never ship it in the client bundle.
 
 const WARMUP_MIN = 30; // simulate the last 30 min on load so the app never opens empty
 const MAX_BUCKETS_POR_TICK = 1000; // safety valve at 60x
 
 type Valores = Partial<Record<Magnitud, number | EstadoPuerta>>;
 
+interface SessionCheckpoint {
+  version: 1;
+  engine: EngineSnapshot;
+  simNowMs: number;
+  valores: Record<AulaCodigo, Valores>;
+  escenarios: Record<AulaCodigo, Escenario>;
+  velocidad: Velocidad;
+  corriendo: boolean;
+  recentLog: LogRow[];
+  scenarioTimeline?: Record<AulaCodigo, ScenarioTransition[]>;
+}
+
 interface AppState {
   inicializado: boolean;
   rol: Rol;
+  connected: boolean;
+  refreshSession: () => Promise<boolean>;
+  authorizeWrite: () => Promise<boolean>;
   sonido: boolean;
   umbrales: Umbrales;
   horario: Horario;
@@ -58,16 +87,17 @@ interface AppState {
   log: LogRow[];
 
   iniciar: () => void;
-  setRol: (rol: Rol) => void;
+  setRol: (rol: Rol) => Promise<void>;
+  login: (pin: string) => Promise<string | null>;
   setSonido: (v: boolean) => void;
-  setUmbrales: (u: Umbrales, actor: string) => void;
-  setHorario: (h: Horario, actor: string) => void;
-  setEscenario: (aula: AulaCodigo, e: Escenario) => void;
-  setVelocidad: (v: Velocidad) => void;
-  setCorriendo: (v: boolean) => void;
-  acusar: (aula: AulaCodigo, idEvento: string) => void;
-  inyectarEvento: (aula: AulaCodigo, tipo: TipoEvento) => void;
-  agregarLog: (row: LogRow) => void;
+  setUmbrales: (u: Umbrales, actor: string) => Promise<boolean>;
+  setHorario: (h: Horario, actor: string) => Promise<boolean>;
+  setEscenario: (aula: AulaCodigo, e: Escenario) => Promise<boolean>;
+  setVelocidad: (v: Velocidad) => Promise<boolean>;
+  setCorriendo: (v: boolean) => Promise<boolean>;
+  acusar: (aula: AulaCodigo, idEvento: string) => Promise<boolean>;
+  inyectarEvento: (aula: AulaCodigo, tipo: TipoEvento) => Promise<boolean>;
+  agregarLog: (row: LogRow) => Promise<boolean>;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +110,10 @@ let anclaRealMs = 0;
 let anclaSimMs = 0;
 let ultimoBucketMs = 0;
 let pendientesGuardar: LogRow[] = [];
+let scenarioTimeline: Record<AulaCodigo, ScenarioTransition[]> = {
+  "L-419": [{ at: 0, scenario: "clase_normal" }],
+  "A-1001": [{ at: 0, scenario: "clase_normal" }],
+};
 
 export function getDataSource(): DataSource {
   if (!dataSource) throw new Error("store no inicializado");
@@ -91,18 +125,58 @@ function simNow(velocidad: number): number {
 }
 
 export const useApp = create<AppState>((set, get) => {
+  let sessionVersion = 0;
+  let authPending = false;
+  const persistSession = () => {
+    if (!engine || !get().inicializado) return;
+    const state = get();
+    saveLocal<SessionCheckpoint>("session:v2", {
+      version: 1,
+      engine: engine.snapshot(),
+      simNowMs: state.simNowMs,
+      valores: state.valores,
+      escenarios: state.escenarios,
+      velocidad: state.velocidad,
+      corriendo: state.corriendo,
+      recentLog: state.log.slice(-500),
+      scenarioTimeline,
+    });
+    if (pendientesGuardar.length > 0) {
+      const rows = pendientesGuardar;
+      pendientesGuardar = [];
+      void guardarLogRows(rows);
+    }
+  };
+
   const aplicarEmits = (emits: EngineEmit[], fechaMs: number) => {
     if (emits.length === 0) return;
     const nuevas: LogRow[] = [];
     for (const e of emits) {
-      if (e.accion === "cerrar") continue; // closures update the open list, not the log
+      if (e.accion === "cerrar") {
+        const closed = { ...e.evento };
+        pendientesGuardar.push(closed);
+        set((s) => ({
+          log: s.log.map((row) =>
+            row.id_evento === closed.id_evento
+              ? { ...row, cerrado: true, acuse: closed.acuse }
+              : row,
+          ),
+        }));
+        continue;
+      }
       nuevas.push({ ...e.evento });
       if (e.accion === "abrir") {
         const cat = CATALOGO_EVENTOS[e.evento.tipo];
         const titulo = `${cat.nombre} · ${e.evento.aula}`;
         if (e.evento.severidad === "critico") {
           toast.error(titulo, { description: cat.accion, duration: 10_000 });
-          void notificarTodos({ titulo, cuerpo: cat.accion, evento: e.evento, url: "/alertas" });
+          if (get().rol === "administrador")
+            void notificarTodos({
+              titulo,
+              cuerpo: cat.accion,
+              evento: e.evento,
+              url: "/alertas",
+            });
           if (get().sonido) reproducirAlerta();
         } else {
           toast.warning(titulo, { description: cat.accion, duration: 6_000 });
@@ -133,7 +207,9 @@ export const useApp = create<AppState>((set, get) => {
     emits.push(...eng.tick(bucketMs));
     if (silencioso) {
       // warm-up: keep log rows, skip toasts/push
-      const nuevas = emits.filter((e) => e.accion !== "cerrar").map((e) => ({ ...e.evento }));
+      const nuevas = emits
+        .filter((e) => e.accion !== "cerrar")
+        .map((e) => ({ ...e.evento }));
       pendientesGuardar.push(...nuevas);
       set((s) => ({ log: aplicarRetencion([...s.log, ...nuevas], bucketMs) }));
     } else {
@@ -152,6 +228,14 @@ export const useApp = create<AppState>((set, get) => {
   const tickReal = () => {
     const s = get();
     if (!s.corriendo || !engine) return;
+    if (
+      !s.connected ||
+      (typeof navigator !== "undefined" && !navigator.onLine)
+    ) {
+      anclaRealMs = Date.now();
+      anclaSimMs = s.simNowMs;
+      return;
+    }
     const objetivo = simNow(s.velocidad);
     let bucket = ultimoBucketMs + TICK_MS;
     let n = 0;
@@ -161,15 +245,13 @@ export const useApp = create<AppState>((set, get) => {
       bucket += TICK_MS;
       n++;
     }
-    if (pendientesGuardar.length > 0) {
-      void guardarLogRows(pendientesGuardar);
-      pendientesGuardar = [];
-    }
+    if (n > 0) persistSession();
   };
 
   return {
     inicializado: false,
     rol: "visualizador",
+    connected: false,
     sonido: false,
     umbrales: umbralesSeed as Umbrales,
     horario: HORARIO_DEFAULT,
@@ -184,53 +266,203 @@ export const useApp = create<AppState>((set, get) => {
 
     iniciar: () => {
       if (get().inicializado || typeof window === "undefined") return;
-      const umbrales = loadLocal<Umbrales>("umbrales", umbralesSeed as Umbrales);
+      const umbrales = loadLocal<Umbrales>(
+        "umbrales",
+        umbralesSeed as Umbrales,
+      );
       const horario = loadLocal<Horario>("horario", HORARIO_DEFAULT);
-      const rol = loadLocal<Rol>("rol", "visualizador");
+      const rol: Rol = "visualizador";
       const sonido = loadLocal<boolean>("sonido", false);
-      const escenarios = loadLocal<Record<AulaCodigo, Escenario>>("escenarios", {
-        "L-419": "clase_normal",
-        "A-1001": "clase_normal",
-      });
+      const escenarios = loadLocal<Record<AulaCodigo, Escenario>>(
+        "escenarios",
+        {
+          "L-419": "clase_normal",
+          "A-1001": "clase_normal",
+        },
+      );
       engine = new RuleEngine({ umbrales, horario, aulas: AULAS });
+      for (const aula of CODIGOS_AULA) {
+        scenarioTimeline[aula] = [
+          { at: 0, scenario: "clase_normal" },
+          { at: Date.now(), scenario: escenarios[aula] },
+        ];
+      }
       dataSource = new SimulatedDataSource({
-        horario,
+        horario: () => get().horario,
         escenario: (aula) => get().escenarios[aula],
+        timeline: (aula) => scenarioTimeline[aula],
       });
       anclaRealMs = Date.now();
       anclaSimMs = Date.now();
-      ultimoBucketMs = Math.floor((anclaSimMs - WARMUP_MIN * 60_000) / TICK_MS) * TICK_MS;
-      set({ inicializado: true, umbrales, horario, rol, sonido, escenarios, simNowMs: anclaSimMs });
+      ultimoBucketMs =
+        Math.floor((anclaSimMs - WARMUP_MIN * 60_000) / TICK_MS) * TICK_MS;
+      set({
+        inicializado: true,
+        umbrales,
+        horario,
+        rol,
+        sonido,
+        escenarios,
+        simNowMs: anclaSimMs,
+      });
+      void get().refreshSession();
 
       void cargarLogRows().then((rows) => {
         if (rows.length > 0) {
           set((s) => {
             const ids = new Set(s.log.map((r) => r.id_evento));
             const restauradas = rows.filter((r) => !ids.has(r.id_evento));
-            return { log: aplicarRetencion([...restauradas, ...s.log], Date.now()) };
+            return {
+              log: aplicarRetencion(
+                [...restauradas, ...s.log],
+                s.simNowMs || Date.now(),
+              ).sort((a, b) => a.ts.localeCompare(b.ts)),
+            };
           });
         }
       });
 
-      // warm-up: replay the last 30 sim-minutes without notifications
-      let bucket = ultimoBucketMs + TICK_MS;
-      const ahora = Date.now();
-      while (bucket <= ahora) {
-        procesarBucket(bucket, true);
-        ultimoBucketMs = bucket;
-        bucket += TICK_MS;
+      const checkpoint = loadLocal<SessionCheckpoint | null>(
+        "session:v2",
+        null,
+      );
+      let restored = false;
+      if (
+        checkpoint?.version === 1 &&
+        Number.isFinite(checkpoint.simNowMs) &&
+        checkpoint.simNowMs > 0 &&
+        Array.isArray(checkpoint.recentLog) &&
+        checkpoint.valores?.["L-419"] &&
+        checkpoint.valores?.["A-1001"] &&
+        checkpoint.escenarios?.["L-419"] &&
+        checkpoint.escenarios?.["A-1001"] &&
+        [1, 10, 60].includes(checkpoint.velocidad)
+      ) {
+        try {
+          engine.restore(checkpoint.engine);
+          if (
+            checkpoint.scenarioTimeline?.["L-419"] &&
+            checkpoint.scenarioTimeline?.["A-1001"]
+          )
+            scenarioTimeline = checkpoint.scenarioTimeline;
+          ultimoBucketMs = checkpoint.simNowMs;
+          anclaSimMs = ultimoBucketMs;
+          anclaRealMs = Date.now();
+          set({
+            simNowMs: ultimoBucketMs,
+            valores: checkpoint.valores,
+            escenarios: checkpoint.escenarios,
+            velocidad: checkpoint.velocidad,
+            corriendo: checkpoint.corriendo,
+            log: aplicarRetencion(checkpoint.recentLog, ultimoBucketMs),
+            abiertos: engine.eventosAbiertos(),
+            estados: Object.fromEntries(
+              CODIGOS_AULA.map((code) => [
+                code,
+                engine!.getEstado(code, new Date(ultimoBucketMs)),
+              ]),
+            ) as Record<AulaCodigo, EstadoAula>,
+          });
+          pendientesGuardar.push(...checkpoint.recentLog);
+          restored = true;
+        } catch {
+          /* Ignore a corrupt checkpoint; IndexedDB history is still restored. */
+        }
       }
-      if (pendientesGuardar.length > 0) {
-        void guardarLogRows(pendientesGuardar);
-        pendientesGuardar = [];
+      if (!restored) {
+        // Warm up only a new session. Reloading must not recreate old alerts.
+        let bucket = ultimoBucketMs + TICK_MS;
+        const ahora = Date.now();
+        while (bucket <= ahora) {
+          procesarBucket(bucket, true);
+          ultimoBucketMs = bucket;
+          bucket += TICK_MS;
+        }
       }
+      persistSession();
       if (intervalo) clearInterval(intervalo);
       intervalo = setInterval(tickReal, 1000);
     },
 
-    setRol: (rol) => {
-      saveLocal("rol", rol);
-      set({ rol });
+    refreshSession: async () => {
+      if (authPending) return false;
+      const version = ++sessionVersion;
+      try {
+        if (typeof navigator !== "undefined" && !navigator.onLine)
+          throw new Error("offline");
+        const response = await fetch("/api/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!response.ok) throw new Error("Session unavailable");
+        const body = await response.json();
+        if (body?.rol !== "administrador" && body?.rol !== "visualizador")
+          throw new Error("Invalid session response");
+        if (version !== sessionVersion) return false;
+        set({ rol: body.rol, connected: true });
+        return true;
+      } catch {
+        if (version === sessionVersion)
+          set({ rol: "visualizador", connected: false });
+        return false;
+      }
+    },
+
+    authorizeWrite: async () => {
+      if (get().rol !== "administrador") return false;
+      if (!(await get().refreshSession()) || get().rol !== "administrador") {
+        toast.error(
+          "No se guardó el cambio. Verifica la conexión e inicia sesión nuevamente.",
+        );
+        return false;
+      }
+      return true;
+    },
+
+    setRol: async (rol) => {
+      if (rol !== "visualizador") return;
+      const version = ++sessionVersion;
+      authPending = true;
+      set({ rol: "visualizador" });
+      try {
+        const response = await fetch("/api/session", {
+          method: "DELETE",
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!response.ok) throw new Error("Logout failed");
+      } catch {
+        toast.error(
+          "No se pudo cerrar la sesión del servidor. Reconecta y vuelve a intentarlo antes de salir.",
+        );
+      } finally {
+        if (version === sessionVersion) authPending = false;
+      }
+    },
+
+    login: async (pin) => {
+      const version = ++sessionVersion;
+      authPending = true;
+      try {
+        const response = await fetch("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: AbortSignal.timeout(5000),
+          body: JSON.stringify({ pin }),
+        });
+        const body = await response.json();
+        if (version !== sessionVersion)
+          return "La sesión cambió; vuelve a intentarlo.";
+        if (!response.ok) return body.error ?? "No se pudo validar el PIN.";
+        set({ rol: "administrador", connected: true });
+        return null;
+      } catch {
+        if (version === sessionVersion)
+          set({ connected: false, rol: "visualizador" });
+        return "Sin conexión: solo lectura. No se pudo validar el PIN.";
+      } finally {
+        if (version === sessionVersion) authPending = false;
+      }
     },
 
     setSonido: (v) => {
@@ -238,7 +470,8 @@ export const useApp = create<AppState>((set, get) => {
       set({ sonido: v });
     },
 
-    setUmbrales: (u, actor) => {
+    setUmbrales: async (u, actor) => {
+      if (!(await get().authorizeWrite())) return false;
       saveLocal("umbrales", u);
       engine?.setUmbrales(u);
       const row: LogRow = {
@@ -255,9 +488,12 @@ export const useApp = create<AppState>((set, get) => {
       };
       pendientesGuardar.push(row);
       set((s) => ({ umbrales: u, log: [...s.log, row] }));
+      persistSession();
+      return true;
     },
 
-    setHorario: (h, actor) => {
+    setHorario: async (h, actor) => {
+      if (!(await get().authorizeWrite())) return false;
       saveLocal("horario", h);
       engine?.setHorario(h);
       const row: LogRow = {
@@ -274,37 +510,59 @@ export const useApp = create<AppState>((set, get) => {
       };
       pendientesGuardar.push(row);
       set((s) => ({ horario: h, log: [...s.log, row] }));
+      persistSession();
+      return true;
     },
 
-    setEscenario: (aula, e) => {
+    setEscenario: async (aula, e) => {
+      if (!(await get().authorizeWrite())) return false;
+      if (
+        e === "intruso_ventana" &&
+        AULAS.find((item) => item.codigo === aula)!.ventanas === 0
+      )
+        return false;
+      scenarioTimeline[aula].push({
+        at: get().simNowMs + TICK_MS,
+        scenario: e,
+      });
       set((s) => {
         const escenarios = { ...s.escenarios, [aula]: e };
         saveLocal("escenarios", escenarios);
         return { escenarios };
       });
+      persistSession();
+      return true;
     },
 
-    setVelocidad: (v) => {
+    setVelocidad: async (v) => {
+      if (!(await get().authorizeWrite())) return false;
       // re-anchor so the sim clock is continuous across speed changes
-      anclaSimMs = simNow(get().velocidad);
+      anclaSimMs = get().corriendo ? simNow(get().velocidad) : get().simNowMs;
       anclaRealMs = Date.now();
       set({ velocidad: v });
+      persistSession();
+      return true;
     },
 
-    setCorriendo: (v) => {
+    setCorriendo: async (v) => {
+      if (!(await get().authorizeWrite())) return false;
       if (v) {
         anclaSimMs = get().simNowMs || Date.now();
         anclaRealMs = Date.now();
       }
       set({ corriendo: v });
+      persistSession();
+      return true;
     },
 
-    acusar: (aula, idEvento) => {
-      if (!engine) return;
-      const actor = get().rol === "administrador" ? "administrador" : "visualizador";
+    acusar: async (aula, idEvento) => {
+      if (!(await get().authorizeWrite())) return false;
+      if (!engine) return false;
+      const actor =
+        get().rol === "administrador" ? "administrador" : "visualizador";
       const fechaMs = get().simNowMs || Date.now();
       const ev = engine.acusar(aula, idEvento, actor, fechaMs);
-      if (!ev) return;
+      if (!ev) return false;
       const row: LogRow = {
         ts: isoLima(new Date(fechaMs)),
         aula,
@@ -317,29 +575,48 @@ export const useApp = create<AppState>((set, get) => {
         actor,
         estado_resultante: engine.getEstado(aula, new Date(fechaMs)),
       };
-      pendientesGuardar.push(row);
+      pendientesGuardar.push({ ...ev }, row);
       set((s) => ({
         abiertos: engine!.eventosAbiertos(),
-        estados: { ...s.estados, [aula]: engine!.getEstado(aula, new Date(fechaMs)) },
-        log: [...s.log, row],
+        estados: {
+          ...s.estados,
+          [aula]: engine!.getEstado(aula, new Date(fechaMs)),
+        },
+        log: [
+          ...s.log.map((item) =>
+            item.id_evento === ev.id_evento ? { ...ev } : item,
+          ),
+          row,
+        ],
       }));
+      persistSession();
       toast.success(`Acuse registrado (${ev.tipo})`);
+      return true;
     },
 
-    inyectarEvento: (aula, tipo) => {
-      if (!engine) return;
+    inyectarEvento: async (aula, tipo) => {
+      if (!(await get().authorizeWrite())) return false;
+      if (!engine) return false;
       const fechaMs = get().simNowMs || Date.now();
       const emit = engine.inyectar(aula, tipo, fechaMs, "administrador");
       aplicarEmits([emit], fechaMs);
       set((s) => ({
         abiertos: engine!.eventosAbiertos(),
-        estados: { ...s.estados, [aula]: engine!.getEstado(aula, new Date(fechaMs)) },
+        estados: {
+          ...s.estados,
+          [aula]: engine!.getEstado(aula, new Date(fechaMs)),
+        },
       }));
+      persistSession();
+      return true;
     },
 
-    agregarLog: (row) => {
+    agregarLog: async (row) => {
+      if (!(await get().authorizeWrite())) return false;
       pendientesGuardar.push(row);
       set((s) => ({ log: [...s.log, row] }));
+      persistSession();
+      return true;
     },
   };
 });

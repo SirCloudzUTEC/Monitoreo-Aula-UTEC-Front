@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { useOnline } from "@/lib/use-online";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useApp, CODIGOS_AULA } from "@/lib/store";
 import { horaLarga, ETIQUETA_ESTADO, CLASE_ESTADO } from "@/lib/format";
 
@@ -34,11 +36,26 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/", etiqueta: "Inicio", icono: HouseIcon },
   { href: "/alertas", etiqueta: "Alertas", icono: BellIcon, conAlertas: true },
-  { href: "/aula/L-419", etiqueta: "Aula L-419", icono: DoorOpenIcon, soloDesktop: true },
-  { href: "/aula/A-1001", etiqueta: "Aula A-1001", icono: DoorOpenIcon, soloDesktop: true },
+  {
+    href: "/aula/L-419",
+    etiqueta: "Aula L-419",
+    icono: DoorOpenIcon,
+    soloDesktop: true,
+  },
+  {
+    href: "/aula/A-1001",
+    etiqueta: "Aula A-1001",
+    icono: DoorOpenIcon,
+    soloDesktop: true,
+  },
   { href: "/log", etiqueta: "Log de eventos", icono: ScrollTextIcon },
   { href: "/simulador", etiqueta: "Simulador", icono: SlidersHorizontalIcon },
-  { href: "/importar", etiqueta: "Importar plano", icono: FileUpIcon, soloDesktop: true },
+  {
+    href: "/importar",
+    etiqueta: "Importar plano",
+    icono: FileUpIcon,
+    soloDesktop: true,
+  },
   { href: "/ajustes", etiqueta: "Ajustes", icono: Settings2Icon },
 ];
 
@@ -48,6 +65,7 @@ function activo(pathname: string, href: string): boolean {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const online = useOnline();
   const abiertos = useApp((s) => s.abiertos);
   const estados = useApp((s) => s.estados);
   const simNowMs = useApp((s) => s.simNowMs);
@@ -83,7 +101,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {a}: {ETIQUETA_ESTADO[estados[a]]}
               </Link>
             ))}
-            <Badge variant="outline" className="font-mono tabular-nums" title="Hora simulada (Lima)">
+            <Badge
+              variant="outline"
+              className="font-mono tabular-nums"
+              title="Hora simulada (Lima)"
+            >
               {simNowMs ? horaLarga(simNowMs) : "--:--:--"}
             </Badge>
             {(velocidad !== 1 || !corriendo) && (
@@ -91,13 +113,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {corriendo ? `×${velocidad}` : "Pausado"}
               </Badge>
             )}
-            <Badge variant="outline" className="hidden capitalize sm:inline-flex" title="Rol activo">
+            <Badge
+              variant="outline"
+              className="hidden capitalize sm:inline-flex"
+              title="Rol activo"
+            >
               {rol}
             </Badge>
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
+      <div
+        role="status"
+        className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground"
+      >
+        {online
+          ? "Demostración · datos simulados, sin sensores conectados"
+          : "Sin conexión · solo lectura"}
+      </div>
       <div className="flex flex-1">
         {/* sidebar (md+) */}
         <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-56 shrink-0 border-r md:block">
@@ -134,7 +169,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1 p-4 pb-20 md:p-6 md:pb-6">{children}</main>
+        <main className="min-w-0 flex-1 p-4 pb-20 md:p-6 md:pb-6">
+          {children}
+        </main>
       </div>
 
       {/* bottom tab bar (mobile) */}
@@ -145,7 +182,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             href={item.href}
             className={cn(
               "relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]",
-              activo(pathname, item.href) ? "text-primary" : "text-muted-foreground",
+              activo(pathname, item.href)
+                ? "text-primary"
+                : "text-muted-foreground",
             )}
           >
             <item.icono className="size-5" aria-hidden />

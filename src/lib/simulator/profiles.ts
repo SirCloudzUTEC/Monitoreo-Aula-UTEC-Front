@@ -38,6 +38,7 @@ export interface PerfilContexto {
   aula: AulaCodigo;
   escenario: Escenario;
   horario: Horario;
+  scenarioStartMs?: number;
 }
 
 const MIN = 60_000;
@@ -49,7 +50,8 @@ function key(ctx: PerfilContexto, mag: string): string {
 /** People inside the classroom at time t (deterministic). */
 export function ocupacionAt(ctx: PerfilContexto, fecha: Date): number {
   const { aula, escenario, horario } = ctx;
-  if (escenario === "aula_libre") return 0;
+  if (escenario === "aula_libre" || escenario === "intruso_ventana") return 0;
+  if (escenario === "aforo_excedido") return getAula(aula).aforo + 5;
   const bloque = bloqueEnCurso(horario, aula, fecha);
   if (!bloque) return 0;
   const dentro = minutosDeClase(horario, aula, fecha);
@@ -57,14 +59,18 @@ export function ocupacionAt(ctx: PerfilContexto, fecha: Date): number {
   const cfg = getAula(aula);
   // deterministic class size for this specific block instance
   const dayBucket = Math.floor(fecha.getTime() / (24 * 60 * MIN));
-  let objetivo = Math.round(cfg.aforo * (0.55 + 0.3 * noiseAt(key(ctx, "clase"), dayBucket)));
-  if (escenario === "aforo_excedido") objetivo = cfg.aforo + 5;
+  const objetivo = Math.round(
+    cfg.aforo * (0.55 + 0.3 * noiseAt(key(ctx, "clase"), dayBucket)),
+  );
+
   // ramp in during first 10 minutes, ramp out during last 5
   let n = objetivo;
   if (dentro < 10) n = Math.round((objetivo * dentro) / 10);
   if (restan < 5) n = Math.round((objetivo * restan) / 5);
   // small churn during the class
-  const churn = Math.round(smoothNoise(key(ctx, "churn"), fecha.getTime() / (5 * MIN)) * 2);
+  const churn = Math.round(
+    smoothNoise(key(ctx, "churn"), fecha.getTime() / (5 * MIN)) * 2,
+  );
   return Math.max(0, n + (dentro >= 10 && restan >= 5 ? churn : 0));
 }
 
@@ -84,17 +90,32 @@ export function co2At(ctx: PerfilContexto, fecha: Date): number {
     v = Math.max(v, 420 + 1300 * (1 - Math.exp(-minutos / 8)));
   }
   // decay back to baseline after class (approximate via minutes since last block)
-  if (ocup === 0 && !claseEnCurso(horario, aula, fecha) && escenario !== "co2_alto") {
-    v = base + 80 * Math.max(0, smoothNoise(key(ctx, "co2r"), fecha.getTime() / (30 * MIN)));
+  if (
+    ocup === 0 &&
+    !claseEnCurso(horario, aula, fecha) &&
+    escenario !== "co2_alto"
+  ) {
+    v =
+      base +
+      80 *
+        Math.max(
+          0,
+          smoothNoise(key(ctx, "co2r"), fecha.getTime() / (30 * MIN)),
+        );
   }
-  return Math.round(v + gaussAt(key(ctx, "co2"), Math.floor(fecha.getTime() / (5 * MIN))) * 15);
+  return Math.round(
+    v + gaussAt(key(ctx, "co2"), Math.floor(fecha.getTime() / (5 * MIN))) * 15,
+  );
 }
 
 /**
  * Scenario clock: minutes since the scenario "started". Scenarios are anchored
  * to the start of the current hour so effects build up deterministically.
  */
-export function minutosEnEscenario(_ctx: PerfilContexto, fecha: Date): number {
+export function minutosEnEscenario(ctx: PerfilContexto, fecha: Date): number {
+  if (ctx.scenarioStartMs !== undefined)
+    return Math.max(0, (fecha.getTime() - ctx.scenarioStartMs) / MIN);
+  // Stateless API demonstrations without an explicit start keep the hourly reference.
   return fecha.getUTCMinutes() + fecha.getUTCSeconds() / 60;
 }
 
@@ -105,7 +126,8 @@ export function temperaturaAt(ctx: PerfilContexto, fecha: Date): number {
   const diurna = 22.5 + 4.5 * Math.sin(((hf - 9) / 24) * 2 * Math.PI);
   const sinAC = cfg.aireAcondicionado ? 0 : 2.2; // A-1001 runs hotter
   const porGente = ocupacionAt(ctx, fecha) * 0.05;
-  const ruido = smoothNoise(key(ctx, "temp"), fecha.getTime() / (10 * MIN)) * 0.6;
+  const ruido =
+    smoothNoise(key(ctx, "temp"), fecha.getTime() / (10 * MIN)) * 0.6;
   return Math.round((diurna + sinAC + porGente + ruido) * 10) / 10;
 }
 
@@ -114,7 +136,9 @@ export function humedadAt(ctx: PerfilContexto, fecha: Date): number {
   const diurna = 55 - 8 * Math.sin(((hf - 9) / 24) * 2 * Math.PI);
   const porGente = ocupacionAt(ctx, fecha) * 0.12;
   const ruido = smoothNoise(key(ctx, "hum"), fecha.getTime() / (15 * MIN)) * 3;
-  return Math.round(Math.min(95, Math.max(15, diurna + porGente + ruido)) * 10) / 10;
+  return (
+    Math.round(Math.min(95, Math.max(15, diurna + porGente + ruido)) * 10) / 10
+  );
 }
 
 export function luxAt(ctx: PerfilContexto, fecha: Date): number {
@@ -123,7 +147,9 @@ export function luxAt(ctx: PerfilContexto, fecha: Date): number {
   const enClase = claseEnCurso(horario, aula, fecha);
   const hf = horaFrac(fecha);
   const luzDia =
-    cfg.ventanas > 0 ? Math.max(0, Math.sin(((hf - 6) / 13) * Math.PI)) * 120 : 5;
+    cfg.ventanas > 0
+      ? Math.max(0, Math.sin(((hf - 6) / 13) * Math.PI)) * 120
+      : 5;
   const luces = enClase ? 480 : 0;
   const ruido = smoothNoise(key(ctx, "lux"), fecha.getTime() / (5 * MIN)) * 25;
   return Math.max(0, Math.round(luzDia + luces + ruido));
@@ -133,19 +159,26 @@ export function ruidoAt(ctx: PerfilContexto, fecha: Date): number {
   const ocup = ocupacionAt(ctx, fecha);
   const base = ocup > 0 ? 52 + Math.min(14, ocup * 0.35) : 34;
   const rafaga =
-    Math.max(0, smoothNoise(key(ctx, "ruidoB"), fecha.getTime() / (2 * MIN))) * (ocup > 0 ? 14 : 4);
-  const ruido = gaussAt(key(ctx, "ruido"), Math.floor(fecha.getTime() / (1 * MIN))) * 2;
+    Math.max(0, smoothNoise(key(ctx, "ruidoB"), fecha.getTime() / (2 * MIN))) *
+    (ocup > 0 ? 14 : 4);
+  const ruido =
+    gaussAt(key(ctx, "ruido"), Math.floor(fecha.getTime() / (1 * MIN))) * 2;
   return Math.round((base + rafaga + ruido) * 10) / 10;
 }
 
 export function pm25At(ctx: PerfilContexto, fecha: Date): number {
-  const base = 10 + 6 * Math.max(0, smoothNoise(key(ctx, "pm"), fecha.getTime() / (60 * MIN)));
+  const base =
+    10 +
+    6 * Math.max(0, smoothNoise(key(ctx, "pm"), fecha.getTime() / (60 * MIN)));
   const porGente = ocupacionAt(ctx, fecha) * 0.08;
   return Math.round((base + porGente) * 10) / 10;
 }
 
 export function vocAt(ctx: PerfilContexto, fecha: Date): number {
-  const base = 80 + 50 * Math.max(0, smoothNoise(key(ctx, "voc"), fecha.getTime() / (30 * MIN)));
+  const base =
+    80 +
+    50 *
+      Math.max(0, smoothNoise(key(ctx, "voc"), fecha.getTime() / (30 * MIN)));
   const porGente = ocupacionAt(ctx, fecha) * 1.2;
   return Math.round(base + porGente);
 }
@@ -165,15 +198,18 @@ export function puertaAt(ctx: PerfilContexto, fecha: Date): EstadoPuerta {
 
 export function proximidadVentanaAt(ctx: PerfilContexto, fecha: Date): number {
   if (ctx.escenario === "intruso_ventana") {
-    const m = minutosEnEscenario(ctx, fecha);
-    // intruder approaches during minutes 2..12 of each hour
-    if (m > 2 && m < 12) return Math.round((0.4 + 0.3 * noiseAt("intruso", Math.floor(m))) * 100) / 100;
+    return 0.5; // Explicit scenario: the rule engine still enforces 3 s persistence.
   }
-  const base = 4.5 + smoothNoise(`${ctx.aula}:prox`, fecha.getTime() / (10 * MIN)) * 1.2;
+  const base =
+    4.5 + smoothNoise(`${ctx.aula}:prox`, fecha.getTime() / (10 * MIN)) * 1.2;
   return Math.round(base * 100) / 100;
 }
 
-export function bateriaAt(ctx: PerfilContexto, nodo: string, fecha: Date): number {
+export function bateriaAt(
+  ctx: PerfilContexto,
+  nodo: string,
+  fecha: Date,
+): number {
   // slow sawtooth discharge over ~20 days, offset per node
   const horas = fecha.getTime() / (60 * MIN);
   const offset = (noiseAt(`${ctx.aula}:${nodo}:bat`, 0) * 500) | 0;
@@ -182,7 +218,7 @@ export function bateriaAt(ctx: PerfilContexto, nodo: string, fecha: Date): numbe
 }
 
 /** Whether a node is alive at t (nodo_caido kills nodoAmbiental). */
-export function nodoVivo(ctx: PerfilContexto, nodo: string, _fecha: Date): boolean {
+export function nodoVivo(ctx: PerfilContexto, nodo: string): boolean {
   if (ctx.escenario === "nodo_caido" && nodo === "nodoAmbiental") return false;
   return true;
 }

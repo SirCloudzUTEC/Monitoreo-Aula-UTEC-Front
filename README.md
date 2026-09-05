@@ -1,113 +1,123 @@
 # Aula Digital UTEC
 
-Gemelo digital de dos aulas instrumentadas de UTEC (**L-419** y **A-1001**) para el curso
-PI3. Es una PWA que muestra en tiempo real el confort térmico, la iluminación, la calidad
-de aire, el ruido, el aforo, los accesos, el perímetro de ventanas y la salud de los nodos
-de cada aula, con alertas, log auditable y un simulador determinista mientras no existe el
-hardware real.
+Demostración del gemelo digital de las aulas **L-419** y **A-1001** para PI3 – UTEC: confort, iluminación, calidad de aire, ruido, aforo, accesos, ventanas y salud de nodos.
 
-- **Stack**: Next.js (App Router) + TypeScript estricto + Tailwind + shadcn/ui + Recharts +
-  Zustand + Vitest. Desplegable en Vercel sin base de datos (fase 1).
-- **Idiomas**: interfaz en español; código, archivos y commits en inglés.
+**Los datos son simulados. No hay sensores, broker MQTT ni integración física conectados.** El plano SVG es esquemático; Blender y los planos oficiales quedan para otra fase.
 
-## Cómo correr
+Stack: Next.js **16.3.4** (App Router), React, TypeScript, Tailwind, shadcn/ui, Recharts, Zustand y Vitest. Interfaz española. API compatible con Vercel serverless, sin base de datos externa en esta fase.
+
+## Desarrollo local
+
+Requisitos: Node.js 22 LTS o posterior compatible y npm. Se conserva un único `package-lock.json`.
 
 ```bash
-npm install
-npm run dev        # http://localhost:3000
+npm ci
+npm run setup:local
+npm run dev
 ```
 
-Otros comandos:
+Abre `http://localhost:3000`. `setup:local` crea `.env.local` únicamente si no existe, con un secreto aleatorio y un PIN **exclusivo para desarrollo**. Consulta el PIN en ese archivo o en la salida del comando. Nunca subas `.env.local` a Git.
+
+Si el archivo ya existía, completa `DEMO_ADMIN_PIN` y `AUTH_SESSION_SECRET` según `.env.example`; el script no lo sobrescribe. Cambiar variables requiere reiniciar el servidor.
+
+### Permisos de demostración
+
+En **Ajustes → Entrar como administrador**, introduce el PIN configurado en el servidor. La API valida el PIN y emite una cookie firmada, HttpOnly, SameSite=Strict, de ocho horas. El navegador no contiene el secreto ni recupera un rol administrativo desde localStorage.
+
+- Visualizador: lectura, filtros y exportaciones.
+- Administrador: escenarios, inyección/acuse de eventos, umbrales, horario y guardado de plano/contactos.
+- Las escrituras locales revalidan la sesión; las API protegidas no confían en `x-rol`.
+- La sesión se consulta al cargar, al recuperar foco/conexión y cada 30 segundos. Perder la sesión impide la siguiente escritura.
+
+**Es una demo con PIN compartido, no autenticación institucional.** No usar para decisiones operativas, acceso físico ni datos privados. Antes de uso real hacen falta cuentas, autorización centralizada, control de intentos y persistencia compartida.
+
+## Pruebas y compilación
 
 ```bash
-npm run build      # build de producción
-npm run lint       # ESLint
-npm test           # 36+ tests (Vitest)
+npm test
+npm run lint
+npm run typecheck
+npm run build
 ```
 
-### Notificaciones push (opcional en local)
+Para probar la PWA y las pruebas E2E, usa el build de producción (el service worker no se registra con `npm run dev`):
 
-1. Genera un par de claves VAPID:
+```bash
+# Terminal 1
+npm run build
+npm run start -- --hostname 127.0.0.1 --port 3101
 
-   ```bash
-   npx web-push generate-vapid-keys
-   ```
+# Terminal 2, desde el mismo proyecto
+npm run test:e2e
+```
 
-2. Copia `.env.example` a `.env.local` y completa:
+Playwright usa Chrome instalado en local. En CI usa Chromium, instalable con `npx playwright install --with-deps chromium`. Las pruebas toman el PIN de `UTEC_TEST_PIN` o de `DEMO_ADMIN_PIN` en `.env.local`; no uses credenciales de producción en pruebas. `UTEC_BASE_URL` permite elegir otra instancia **de pruebas**, sin apuntar a producción.
 
-   ```
-   NEXT_PUBLIC_VAPID_PUBLIC_KEY=...
-   VAPID_PRIVATE_KEY=...
-   ```
+Las trazas y capturas de fallos pueden contener datos de la sesión de prueba: permanecen ignoradas en `test-results/` y no deben publicarse sin revisar.
 
-3. Reinicia `npm run dev`, entra a **Ajustes → Notificaciones** y pulsa
-   "Activar notificaciones push".
+## Pantallas
 
-## Mapa de la app
+| Ruta               | Uso                                                   |
+| ------------------ | ----------------------------------------------------- |
+| `/`                | Resumen de las aulas y módulos                        |
+| `/modulo/[id]`     | Gráficas, umbrales y anomalías                        |
+| `/alertas`         | Alertas, acuses e historial                           |
+| `/aula/[codigo]`   | Plano 2D, nodos y componentes                         |
+| `/pantalla/[aula]` | Vista de monitor con valores grandes                  |
+| `/log`             | Filtros y CSV de diez columnas                        |
+| `/simulador`       | Escenarios, velocidad y eventos manuales              |
+| `/importar`        | Contorno CSV, DXF o JSON con vista previa             |
+| `/ajustes`         | Sesión, umbrales, horario, contactos y notificaciones |
 
-| Ruta | Qué es |
-| --- | --- |
-| `/` | Dashboard: resumen por aula + 8 módulos con semáforo y sparkline |
-| `/modulo/[id]` | Detalle de un módulo: gráficas 1 h / 24 h / 7 d con umbrales y anomalías |
-| `/alertas` | Alertas abiertas (acusar recibo, escalamiento) e historial |
-| `/pantalla/[aula]` | Vista TV 24" a pantalla completa (letras grandes, banner crítico) |
-| `/aula/[codigo]` | Gemelo del aula: plano SVG 2D, nodos, sensores y componentes |
-| `/importar` | Importa el contorno del aula (CSV, DXF o JSON) con vista previa |
-| `/log` | Log de eventos SYS-10.1: filtros, export CSV exacto y huella por actor |
-| `/simulador` | (admin) Escenarios por aula, velocidad ×1/×10/×60, inyectar eventos |
-| `/ajustes` | Umbrales, horario semanal, rol (PIN), contactos, push y sonido |
+Se conservan redirecciones desde `/dashboard`, `/configuracion`, `/footprint`, `/aulas/:aulaId` y `/login`.
 
-**Rol administrador**: en Ajustes, PIN `2026` (fase 1 simulado). El rol visualizador solo
-lee; la API rechaza sus escrituras.
+## Simulación, persistencia y offline
 
-**Simulación**: al abrir la app corre sola (escenario "clase normal"). En el simulador
-puedes probar `aforo_excedido`, `co2_alto`, `intruso_ventana`, `nodo_caido`, etc. A ×60,
-un minuto real equivale a una hora simulada: útil para ver alertas con persistencia de
-10 minutos.
+Cada navegador ejecuta su propio motor de reglas. Al iniciar por primera vez se simulan los últimos 30 minutos; las recargas posteriores restauran el reloj, estado del motor, alertas y acuses. Los identificadores de eventos evitan colisiones entre sesiones nuevas.
 
-## Desplegar en Vercel
+- localStorage: configuración, plano y checkpoint reciente.
+- IndexedDB: historial de eventos. La vista aplica retención de 90 días; no hay copias de respaldo centrales ni sincronización entre usuarios.
+- Los cambios de escenario se guardan con su instante de inicio para no reescribir las curvas anteriores ni reiniciar el CO₂ al cambiar de hora.
+- Las API son demostraciones sin estado: no representan el historial privado del navegador ni garantizan la misma selección de escenario/configuración. `/api/umbrales` valida, pero no persiste cambios en servidor.
+- La PWA guarda documentos y recursos visitados; evita mezclar HTML, respuestas RSC y API. **Abre las pantallas con conexión antes de depender de ellas offline.**
+- Al detectar desconexión o imposibilidad de validar la conexión con el servidor, conserva las lecturas guardadas y congela el reloj. No autoriza escrituras offline. La comprobación periódica puede tardar hasta 30 segundos más el timeout de cinco segundos si el navegador no emite un evento offline.
+- No se garantiza la recuperación ante borrado de datos del navegador, cuota agotada, cierre durante una escritura o conflictos entre pestañas. Exporta CSV para conservar evidencias importantes.
 
-1. Sube el repo a GitHub:
+## Preparar un despliegue en Vercel
 
-   ```bash
-   git remote add origin https://github.com/TU_USUARIO/aula-digital-utec.git
-   git branch -M main
-   git push -u origin main
-   ```
+El repositorio de trabajo es `SirCloudzUTEC/Monitoreo-Aula-UTEC-Front`. Las correcciones se revisan en una rama y PR; **no ejecutar comandos que reemplacen `main` ni publicar producción sin validar un preview**.
 
-2. En [vercel.com](https://vercel.com) importa el repositorio (framework: Next.js, sin
-   configuración extra).
+En el proyecto Vercel, selecciona Next.js y configura las variables para el entorno correspondiente (Preview o Production):
 
-3. En **Settings → Environment Variables** agrega:
+| Variable                       | Requisito                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| `DEMO_ADMIN_PIN`               | PIN largo y distinto del de desarrollo; solo servidor                                |
+| `AUTH_SESSION_SECRET`          | Secreto aleatorio de al menos 32 caracteres; solo servidor, estable entre instancias |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública, solo si se habilita push                                              |
+| `VAPID_PRIVATE_KEY`            | Clave privada push, solo servidor                                                    |
+| `VAPID_SUBJECT`                | Contacto válido `mailto:...` o `https://...`, necesario para push                    |
 
-   | Variable | Valor |
-   | --- | --- |
-   | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | clave pública VAPID |
-   | `VAPID_PRIVATE_KEY` | clave privada VAPID (secreta) |
-   | `NEXT_PUBLIC_MQTT_WS_URL` | (fase 2) URL WebSocket del broker MQTT |
-   | `MQTT_USER` / `MQTT_PASS` | (fase 2) credenciales del broker |
+Sin las dos primeras variables, la demo permanece en lectura y el login devuelve 503 con un mensaje de configuración. Para generar un secreto de sesión:
 
-4. Redeploy. La PWA queda instalable desde el navegador del celular
-   ("Añadir a pantalla de inicio").
+```bash
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+```
 
-## Conectar el hardware real (fase 2)
+Guárdalo solo en la configuración privada del servidor. No adjuntes la salida a issues o commits. Rotarlo invalida las sesiones existentes.
 
-Cuando exista el procesador de aula con broker MQTT:
+### Web Push opcional
 
-1. Configura `NEXT_PUBLIC_MQTT_WS_URL`, `MQTT_USER` y `MQTT_PASS`.
-2. Implementa `MqttDataSource` (`src/lib/data/data-source.ts`, ya tiene el TODO):
-   suscripción a `utec/aula/+/+/+` con QoS 1; el payload ya es el formato SYS-09.2.
-3. Cambia `getDataSource()` para elegir MQTT cuando la URL esté definida. Ni el motor de
-   reglas ni la UI necesitan cambios.
+Genera claves con `npx web-push generate-vapid-keys`, configura las tres variables VAPID, recompila y prueba con HTTPS (o localhost) y sesión administrativa. En Ajustes, concede permiso y envía una prueba.
 
-## Documentación
+La suscripción pertenece al navegador que está abierto: **no hay registro central de dispositivos ni alertas programadas en servidor al cerrar la app**. Los errores push no desactivan las alertas in-app. Correo y Telegram son adaptadores pendientes; el escalamiento visual indica contactar al responsable, no que se haya enviado un mensaje.
 
-- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — capas, flujo de un tick, máquina de estados.
-- [`docs/DECISIONES.md`](docs/DECISIONES.md) — decisiones tomadas y su porqué.
-- [`docs/MAPEO_REQUISITOS.md`](docs/MAPEO_REQUISITOS.md) — trazabilidad SYS-id → archivo.
-- [`mobile/README.md`](mobile/README.md) — cobertura móvil hoy (PWA) y plan Expo (fase 2).
+## Fase 2 y documentación
 
-## Privacidad
+`MqttDataSource` es un stub: configurar `NEXT_PUBLIC_MQTT_WS_URL` no conecta hardware por sí solo. No expongas credenciales MQTT al cliente. Se requieren broker, procesador de aula y una estrategia de autenticación/sincronización antes de sustituir el simulador.
 
-El sistema nunca captura imágenes ni identidades. El lector de credenciales (PN532)
-almacena únicamente un hash; los actores del log son roles, no personas.
+- [Decisiones](docs/DECISIONES.md)
+- [Arquitectura](docs/ARQUITECTURA.md)
+- [Mapeo de requisitos](docs/MAPEO_REQUISITOS.md)
+- [Integración y verificación](docs/INTEGRACION.md)
+
+El simulador no captura imágenes, audio ni identidades. Los actores actuales son roles de demostración, no personas autenticadas.

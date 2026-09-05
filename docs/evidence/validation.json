@@ -1,0 +1,130 @@
+{
+  "validatedAt": "2026-09-05T18:16:44.534848-05:00",
+  "scope": "Local production build; no deployed Vercel environment or physical hardware tested",
+  "branch": "fix/digital-twin-vercel",
+  "runtime": "v24.13.0",
+  "unit": {
+    "passed": 86,
+    "failed": 0,
+    "files": 12
+  },
+  "browser": {
+    "passed": 18,
+    "failed": 0,
+    "cases": [
+      {
+        "name": "offline reload keeps cached readings frozen and API responses JSON",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route / loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route /aula/L-419 loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route /aula/A-1001 loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route /modulo/aire loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route /pantalla/A-1001 loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route /importar loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route /log loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "desktop route /simulador loads without JavaScript errors",
+        "status": "passed"
+      },
+      {
+        "name": "mobile route / fits the viewport",
+        "status": "passed"
+      },
+      {
+        "name": "mobile route /aula/L-419 fits the viewport",
+        "status": "passed"
+      },
+      {
+        "name": "mobile route /ajustes fits the viewport",
+        "status": "passed"
+      },
+      {
+        "name": "settings hydrates without a server/browser capability mismatch",
+        "status": "passed"
+      },
+      {
+        "name": "legacy dashboard and configuration URLs remain available",
+        "status": "passed"
+      },
+      {
+        "name": "visualizador cannot acknowledge alerts or save an imported plan",
+        "status": "passed"
+      },
+      {
+        "name": "administrator can inject, acknowledge and reload without losing log rows",
+        "status": "passed"
+      },
+      {
+        "name": "expired server session blocks local event injection without a reload",
+        "status": "passed"
+      },
+      {
+        "name": "forged role header is forbidden and authenticated malformed input is rejected",
+        "status": "passed"
+      }
+    ]
+  },
+  "checks": {
+    "format-docs": {
+      "exit_code": 0
+    },
+    "unit": {
+      "exit_code": 0
+    },
+    "lint": {
+      "exit_code": 0
+    },
+    "typecheck": {
+      "exit_code": 0
+    },
+    "build": {
+      "exit_code": 0
+    },
+    "diff-check": {
+      "exit_code": 0
+    },
+    "production-audit": {
+      "exit_code": 0,
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      }
+    },
+    "e2e": {
+      "exit_code": 0
+    }
+  },
+  "limitations": [
+    "No independent reviewer agent used (single-agent workflow)",
+    "Demo shared PIN, no institutional accounts or rate limiting",
+    "Browser offline emulation, not physical-disconnection certification",
+    "Push on real devices, MQTT, Blender and official plans not verified",
+    "Local persistence is not centrally synchronized or backed up"
+  ]
+}

@@ -4,14 +4,14 @@ Registro de decisiones tomadas con autonomía donde el requisito era ambiguo.
 
 ## 1. Simulador 100 % determinista (funciones puras del tiempo)
 
-Cada magnitud es una función pura de `(aula, escenario, horario, timestamp)` con ruido
+Cada magnitud es una función pura de `(aula, escenario, inicioEscenario, horario, timestamp)` con ruido
 sembrado (FNV-1a + mulberry32 + Box-Muller). Ventajas:
 
-- Las API routes son *stateless*: Vercel serverless no comparte memoria entre invocaciones,
+- Las API routes son _stateless_: Vercel serverless no comparte memoria entre invocaciones,
   y así cualquier instancia responde igual.
 - Las gráficas muestrean cualquier rango (1 h / 24 h / 7 d) a cualquier resolución sin
   reproducir la historia tick a tick.
-- Cliente y servidor coinciden sin sincronización.
+- Entradas idénticas producen mediciones idénticas. La API usa valores semilla; no comparte el historial ni la configuración local del navegador. Los IDs de eventos incluyen un UUID de sesión y no son deterministas entre motores independientes.
 
 ## 2. Hora siempre en Lima (UTC-5 explícito)
 
@@ -21,9 +21,7 @@ UTC. Nunca se usa `getHours()`/`getDay()` del huso del host.
 
 ## 3. PWA con enfoque nativo de Next (sin @serwist/next)
 
-`@serwist/next` se probó y se desinstaló: fricción con Next 16/Turbopack y una CVE en una
-dependencia anidada. En su lugar: `src/app/manifest.ts` + `public/sw.js` escrito a mano
-(offline read + push). Menos dependencias, mismo resultado.
+Se mantienen `src/app/manifest.ts` y `public/sw.js` para lectura offline y push, sin agregar un plugin de build. El worker solo se registra en producción. Documentos, recursos estáticos, API y RSC tienen políticas separadas; las respuestas API offline son JSON 503, nunca HTML. La cobertura se verifica con pruebas de navegador, no por el solo hecho de que exista un manifest.
 
 ## 4. Anomalías en TypeScript puro (sin TensorFlow.js)
 
@@ -35,13 +33,15 @@ semilla fija) es suficiente y determinista.
 
 La suscripción push vive en el navegador (service worker). `/api/push/send` recibe la
 suscripción en el body y envía. Fase 2: persistir suscripciones del equipo de operaciones
-y hacer *fan-out* en eventos críticos desde el servidor.
+y hacer _fan-out_ en eventos críticos desde el servidor.
 
-## 6. Rol y PIN simulados (fase 1)
+## 6. Sesión de demostración validada por servidor (fase 1)
 
-`PIN_ADMIN = "2026"` con el rol en localStorage. La API de umbrales igual exige
-`x-rol: administrador` (criterio 7). Fase 2: autenticación real (cuentas UTEC), credenciales
-siempre como hash (regla de privacidad del modelo).
+Se descarta el PIN incorporado en el bundle y el encabezado `x-rol`. El PIN vive en `DEMO_ADMIN_PIN`; una cookie HMAC firmada con `AUTH_SESSION_SECRET`, HttpOnly, SameSite=Strict y Secure bajo HTTPS autoriza las API. El origen se compara con el Host real porque NextURL normaliza las direcciones loopback; no se confía en forwarded-host.
+
+Las mutaciones locales consultan `/api/session` antes de escribir. Una respuesta tardía no restaura permisos después del logout. La sesión se revisa también al recuperar foco/conexión y cada 30 segundos. El servidor debe tener el mismo secreto en todas sus instancias; no se generan secretos por petición.
+
+No es autorización multiusuario de producción: el almacenamiento local sigue bajo control del navegador, el PIN es compartido y falta control de intentos. Fase 2: cuentas institucionales, persistencia central y autorización de cada recurso.
 
 ## 7. Eventos inyectados se cierran con el acuse
 
@@ -66,3 +66,13 @@ documenta; en fase 2 el procesador de aula será la fuente de verdad.
 El archivo importado en F5 (CSV/DXF/JSON) se guarda por aula en localStorage
 (`plano:{codigo}`) y `/aula/[codigo]` lo dibuja en lugar del rectángulo de la
 especificación. Heurística de unidades: contornos > 50 m se asumen en cm, > 1000 m en mm.
+
+## 11. Restauración del motor y su historial
+
+Se guarda un checkpoint reciente con reloj, escenarios, cronología de cambios, estado del motor y últimos 500 registros; IndexedDB conserva el historial restante. Las referencias a eventos abiertos se reconstituyen al restaurar el motor. No se repite el calentamiento de 30 minutos al recargar una sesión válida.
+
+El checkpoint no incluye permisos. Las cuotas de almacenamiento, borrados del usuario, cierres durante una transacción y conflictos entre pestañas no tienen garantía de recuperación; exportar CSV sigue siendo necesario para evidencias importantes. La retención de 90 días es un filtro en la vista, no un borrado físico periódico de IndexedDB.
+
+## 12. Modo offline de lectura
+
+`navigator.onLine` no demuestra que el servidor esté disponible. La respuesta de `/api/session` complementa esa señal; mientras no se confirme conectividad, el reloj permanece congelado y no se permiten mutaciones. Se conservan las lecturas guardadas, no se simulan nuevas lecturas durante una desconexión detectada. La emulación de navegador verifica caché, recarga, reloj congelado y reconexión; no sustituye las pruebas físicas en todos los dispositivos.

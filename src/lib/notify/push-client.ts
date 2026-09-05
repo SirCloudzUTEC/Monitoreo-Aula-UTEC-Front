@@ -11,13 +11,17 @@ function base64UrlToUint8Array(base64: string): Uint8Array {
 }
 
 export function pushSoportado(): boolean {
-  return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+  return (
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window
+  );
 }
 
 export async function suscripcionActual(): Promise<PushSubscription | null> {
   if (!pushSoportado()) return null;
-  const reg = await navigator.serviceWorker.ready;
-  return reg.pushManager.getSubscription();
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg?.active ? reg.pushManager.getSubscription() : null;
 }
 
 /** Subscribes this browser to Web Push. Throws with a Spanish message on failure. */
@@ -35,7 +39,11 @@ export async function suscribirPush(): Promise<PushSubscription> {
   if (permiso !== "granted") {
     throw new Error("Permiso de notificaciones denegado.");
   }
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg?.active)
+    throw new Error(
+      "La PWA aún no está lista; recarga la página con conexión.",
+    );
   const existente = await reg.pushManager.getSubscription();
   const sub =
     existente ??
@@ -43,11 +51,15 @@ export async function suscribirPush(): Promise<PushSubscription> {
       userVisibleOnly: true,
       applicationServerKey: base64UrlToUint8Array(clave).buffer as ArrayBuffer,
     }));
-  await fetch("/api/push/subscribe", {
+  const response = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(sub.toJSON()),
   });
+  if (!response.ok)
+    throw new Error(
+      "No se pudo registrar el push. Verifica tu sesión de administrador.",
+    );
   return sub;
 }
 
@@ -71,6 +83,8 @@ export async function probarPush(): Promise<string | null> {
     }),
   });
   if (res.ok) return null;
-  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  const data = (await res.json().catch(() => null)) as {
+    error?: string;
+  } | null;
   return data?.error ?? `Error ${res.status}`;
 }

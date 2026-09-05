@@ -1,47 +1,55 @@
-// POST /api/push/send — sends a Web Push notification to the subscription the
-// browser provides. Phase 1 is stateless (no DB): each browser stores its own
-// subscription and asks the server to push to it. Phase 2: persist operations
-// team subscriptions and fan out on critical events.
-
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
+import { isAdministrator, sameOrigin } from "@/lib/auth/session";
+import { isRecord } from "@/lib/validation";
+import {
+  safeNotificationPath,
+  validSubscription,
+} from "@/lib/notify/validation";
+
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  if (!sameOrigin(req) || !isAdministrator(req))
+    return NextResponse.json({ error: "Solo administrador." }, { status: 403 });
+  const body: unknown = await req.json().catch(() => null);
+  if (!isRecord(body) || !validSubscription(body.subscription))
+    return NextResponse.json(
+      { error: "Suscripción push inválida." },
+      { status: 400 },
+    );
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) {
+  const subject = process.env.VAPID_SUBJECT;
+  if (!publicKey || !privateKey || !subject)
     return NextResponse.json(
-      { error: "Claves VAPID no configuradas (ver README)." },
+      {
+        error:
+          "Push no configurado. Configura las claves VAPID y VAPID_SUBJECT; las alertas in-app siguen disponibles.",
+      },
       { status: 503 },
     );
-  }
-  let body: {
-    subscription?: webpush.PushSubscription;
-    titulo?: string;
-    cuerpo?: string;
-    url?: string;
-  };
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
-  if (!body.subscription?.endpoint) {
-    return NextResponse.json({ error: "Falta subscription" }, { status: 400 });
-  }
-  webpush.setVapidDetails("mailto:operaciones@utec.edu.pe", publicKey, privateKey);
-  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
     await webpush.sendNotification(
       body.subscription,
       JSON.stringify({
-        titulo: body.titulo ?? "Aula Digital UTEC",
-        cuerpo: body.cuerpo ?? "",
-        url: body.url ?? "/alertas",
+        titulo:
+          typeof body.titulo === "string"
+            ? body.titulo.slice(0, 150)
+            : "Aula Digital UTEC",
+        cuerpo:
+          typeof body.cuerpo === "string" ? body.cuerpo.slice(0, 600) : "",
+        url: safeNotificationPath(body.url),
       }),
+      { timeout: 5000, TTL: 300 },
     );
     return NextResponse.json({ ok: true });
-  } catch (err) {
-    const status = (err as { statusCode?: number }).statusCode ?? 500;
-    return NextResponse.json({ error: "No se pudo enviar el push" }, { status });
+  } catch (error) {
+    const code = (error as { statusCode?: number }).statusCode;
+    return NextResponse.json(
+      { error: "No se pudo enviar el push." },
+      { status: code === 410 ? 410 : 502 },
+    );
   }
 }

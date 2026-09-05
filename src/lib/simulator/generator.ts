@@ -1,8 +1,21 @@
 // Turns the deterministic profiles into SYS-09.2 measurements, tick by tick.
 // Equivalent MQTT topic (phase 2, documented only): utec/aula/{codigo}/{nodo}/{magnitud} QoS 1.
 
-import type { Aula, AulaCodigo, Escenario, Horario, Medicion, NodoId } from "@/lib/types";
-import { getAula, nodoVivo, valorMagnitud, UNIDADES, type PerfilContexto } from "./profiles";
+import type {
+  Aula,
+  AulaCodigo,
+  Escenario,
+  Horario,
+  Medicion,
+  NodoId,
+} from "@/lib/types";
+import {
+  getAula,
+  nodoVivo,
+  valorMagnitud,
+  UNIDADES,
+  type PerfilContexto,
+} from "./profiles";
 import { bateriaAt } from "./profiles";
 import type { Magnitud } from "@/lib/types";
 
@@ -18,7 +31,11 @@ export function isoLima(fecha: Date): string {
   );
 }
 
-export function topicMqtt(aula: AulaCodigo, nodo: NodoId, magnitud: Magnitud): string {
+export function topicMqtt(
+  aula: AulaCodigo,
+  nodo: NodoId,
+  magnitud: Magnitud,
+): string {
   return `utec/aula/${aula}/${nodo}/${magnitud}`;
 }
 
@@ -45,8 +62,9 @@ export function medicionesEnTick(
   escenario: Escenario,
   horario: Horario,
   fecha: Date,
+  scenarioStartMs?: number,
 ): Medicion[] {
-  const ctx: PerfilContexto = { aula, escenario, horario };
+  const ctx: PerfilContexto = { aula, escenario, horario, scenarioStartMs };
   const cfg: Aula = getAula(aula);
   const tickMs = alignTick(fecha.getTime());
   const tick = new Date(tickMs);
@@ -57,13 +75,14 @@ export function medicionesEnTick(
     out.push({ ts, aula, nodo, magnitud, valor, unidad: UNIDADES[magnitud] });
 
   // nodoAmbiental: environmental bundle every tick
-  if (nodoVivo(ctx, "nodoAmbiental", tick)) {
-    for (const m of MAGNITUDES_AMBIENTALES) push("nodoAmbiental", m, valorMagnitud(ctx, m, tick));
+  if (nodoVivo(ctx, "nodoAmbiental")) {
+    for (const m of MAGNITUDES_AMBIENTALES)
+      push("nodoAmbiental", m, valorMagnitud(ctx, m, tick));
     if (tickMs % LATIDO_MS === 0) push("nodoAmbiental", "latido", 1);
   }
 
   // nodoPuerta: occupancy + door state + battery/heartbeat
-  if (nodoVivo(ctx, "nodoPuerta", tick)) {
+  if (nodoVivo(ctx, "nodoPuerta")) {
     push("nodoPuerta", "ocupacion", valorMagnitud(ctx, "ocupacion", tick));
     push("nodoPuerta", "puerta", valorMagnitud(ctx, "puerta", tick));
     if (tickMs % LATIDO_MS === 0) {
@@ -73,10 +92,16 @@ export function medicionesEnTick(
   }
 
   // nodoVentana (only rooms with windows)
-  const ventanas: NodoId[] = cfg.nodos.filter((n) => n.startsWith("nodoVentana")) as NodoId[];
+  const ventanas: NodoId[] = cfg.nodos.filter((n) =>
+    n.startsWith("nodoVentana"),
+  ) as NodoId[];
   for (const nodo of ventanas) {
-    if (!nodoVivo(ctx, nodo, tick)) continue;
-    push(nodo, "proximidad_ventana", valorMagnitud(ctx, "proximidad_ventana", tick));
+    if (!nodoVivo(ctx, nodo)) continue;
+    push(
+      nodo,
+      "proximidad_ventana",
+      valorMagnitud(ctx, "proximidad_ventana", tick),
+    );
     if (tickMs % LATIDO_MS === 0) {
       push(nodo, "bateria", bateriaAt(ctx, nodo, tick));
       push(nodo, "latido", 1);
@@ -84,7 +109,7 @@ export function medicionesEnTick(
   }
 
   // procesadorAula: heartbeat every tick (procesador_offline rule watches this)
-  if (nodoVivo(ctx, "procesadorAula", tick)) push("procesadorAula", "latido", 1);
+  if (nodoVivo(ctx, "procesadorAula")) push("procesadorAula", "latido", 1);
 
   return out;
 }
@@ -101,13 +126,20 @@ export function historial(
   desde: Date,
   hasta: Date,
   pasoMs: number,
+  scenarioStartMs?: number,
 ): { ts: string; t: number; valor: number }[] {
-  const ctx: PerfilContexto = { aula, escenario, horario };
+  if (!Number.isFinite(pasoMs) || pasoMs <= 0)
+    throw new Error("El paso de la serie debe ser positivo.");
+  const ctx: PerfilContexto = { aula, escenario, horario, scenarioStartMs };
   const out: { ts: string; t: number; valor: number }[] = [];
   for (let t = alignTick(desde.getTime()); t < hasta.getTime(); t += pasoMs) {
     const d = new Date(t);
     const v = valorMagnitud(ctx, magnitud, d);
-    out.push({ ts: isoLima(d), t, valor: typeof v === "number" ? v : v === "abierta" ? 1 : 0 });
+    out.push({
+      ts: isoLima(d),
+      t,
+      valor: typeof v === "number" ? v : v === "abierta" ? 1 : 0,
+    });
   }
   return out;
 }

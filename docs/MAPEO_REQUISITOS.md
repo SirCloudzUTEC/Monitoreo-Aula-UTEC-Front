@@ -3,36 +3,38 @@
 Tabla de trazabilidad: cada requisito del modelo SysML del curso y el archivo/componente
 que lo implementa. Las descripciones son resúmenes; el detalle vive en el modelo del curso.
 
-| SYS-id | Tema (resumen) | Implementación |
-| --- | --- | --- |
-| SYS-01.4 | Aulas instrumentadas: dimensiones, aforo, puertas/ventanas, A/C | `src/data/aulas.json`, `src/lib/types.ts` (`Aula`), `src/app/aula/[codigo]/page.tsx` |
-| SYS-03.2 | Bloques físicos: sensores y nodos con especificación (rango, exactitud, interfaz, costo) | `src/data/blocks.json`, tablas en `src/app/aula/[codigo]/page.tsx` |
-| SYS-04.3 | Telemetría periódica cada 5 s por nodo | `src/lib/simulator/generator.ts` (`TICK_MS`, `medicionesEnTick`), `src/lib/store.ts` (reloj) |
-| SYS-06.3 | Umbrales de confort/seguridad editables con persistencia e histéresis | `src/data/umbrales.json`, `src/lib/rules/engine.ts`, editor en `src/app/ajustes/page.tsx` |
-| SYS-07.1 | Catálogo de eventos nominales y fuera de nominal con severidad y acción | `src/lib/events/catalog.ts` |
-| SYS-08.4 | Máquina de estados del aula: Cerrada → Libre → EnClase → Alerta (acuse regresa) | `src/lib/rules/engine.ts` (`getEstado`, `acusar`), `src/lib/schedule.ts` |
-| SYS-09.2 | Formato exacto de medición (ts, aula, nodo, magnitud, valor, unidad) y topic MQTT | `src/lib/types.ts` (`Medicion`), `src/lib/simulator/generator.ts` (`isoLima`, `topicMqtt`), test en `tests/simulator.test.ts` |
-| SYS-10.1 | Log de eventos: 10 columnas CSV exactas, export `log_aula_{codigo}.csv`, retención 90 días | `src/lib/events/log.ts` (`COLUMNAS_CSV`, `exportarCsv`, `aplicarRetencion`), `src/app/log/page.tsx` |
-| SYS-10.2 | Huella: secuencia de eventos originados por un actor en un rango de fechas | `src/lib/events/log.ts` (`footprint`), pestaña Huella en `src/app/log/page.tsx` |
-| SYS-11.1 | Alerta de aforo excedido (crítica, inmediata) con notificación al moderador | `src/lib/rules/engine.ts` (condición `aforo`), `src/lib/store.ts` (toast + push) |
-| SYS-11.2 | Acuse de recibo de alertas y retorno al estado anterior | `src/lib/rules/engine.ts` (`acusar`), `src/components/events/evento-card.tsx`, `src/app/alertas/page.tsx` |
-| SYS-11.3 | Escalamiento a los 10 min sin acuse | `src/lib/store.ts` (`estaEscalado`), indicador en `src/components/events/evento-card.tsx` |
-| SYS-11.4 | Vigilancia de perímetro de ventanas (fuera de horario o aula vacía) | `src/lib/rules/engine.ts` (condición `prox:*`), `src/lib/simulator/profiles.ts` (`proximidadVentanaAt`) |
-| SYS-11.5 | Canales de notificación: push + adaptadores email/telegram | `src/lib/notify/channels.ts`, `src/lib/notify/push-client.ts`, `src/app/api/push/*` |
-| SYS-12.2 | Roles administrador/visualizador; la API rechaza escrituras del visualizador; privacidad (solo hash, sin identidades) | `src/app/api/umbrales/route.ts` (403), `src/app/ajustes/page.tsx` (PIN), `src/data/blocks.json` (PN532 solo hash) |
-| SYS-13.1 | Conexión futura al procesador de aula vía MQTT (`utec/aula/{codigo}/{nodo}/{magnitud}`, QoS 1) | `src/lib/data/data-source.ts` (`MqttDataSource` stub + TODO), `topicMqtt` en el generador, variables en `.env.example` |
+Esta tabla identifica código, **no certifica cumplimiento físico ni funcional completo**. Fase 1 usa datos simulados. Push no tiene distribución central entre dispositivos; correo/Telegram y MQTT están pendientes. Los planos son esquemáticos y no se ha verificado legibilidad física a tres metros. Consulta los límites y la evidencia en `INTEGRACION.md` y `DECISIONES.md`.
+
+| SYS-id   | Tema (resumen)                                                                                                        | Implementación                                                                                                                                                                                               |
+| -------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SYS-01.4 | Aulas instrumentadas: dimensiones, aforo, puertas/ventanas, A/C                                                       | `src/data/aulas.json`, `src/lib/types.ts` (`Aula`), `src/app/aula/[codigo]/page.tsx`                                                                                                                         |
+| SYS-03.2 | Bloques físicos: sensores y nodos con especificación (rango, exactitud, interfaz, costo)                              | `src/data/blocks.json`, tablas en `src/app/aula/[codigo]/page.tsx`                                                                                                                                           |
+| SYS-04.3 | Telemetría periódica cada 5 s por nodo                                                                                | `src/lib/simulator/generator.ts` (`TICK_MS`, `medicionesEnTick`), `src/lib/store.ts` (reloj)                                                                                                                 |
+| SYS-06.3 | Umbrales de confort/seguridad editables con persistencia e histéresis                                                 | `src/data/umbrales.json`, `src/lib/rules/engine.ts`, editor en `src/app/ajustes/page.tsx`                                                                                                                    |
+| SYS-07.1 | Catálogo de eventos nominales y fuera de nominal con severidad y acción                                               | `src/lib/events/catalog.ts`                                                                                                                                                                                  |
+| SYS-08.4 | Máquina de estados del aula: Cerrada → Libre → EnClase → Alerta (acuse regresa)                                       | `src/lib/rules/engine.ts` (`getEstado`, `acusar`), `src/lib/schedule.ts`                                                                                                                                     |
+| SYS-09.2 | Formato exacto de medición (ts, aula, nodo, magnitud, valor, unidad) y topic MQTT                                     | `src/lib/types.ts` (`Medicion`), `src/lib/simulator/generator.ts` (`isoLima`, `topicMqtt`), test en `tests/simulator.test.ts`                                                                                |
+| SYS-10.1 | Log de eventos: 10 columnas CSV exactas, export `log_aula_{codigo}.csv`, retención 90 días                            | `src/lib/events/log.ts` (`COLUMNAS_CSV`, `exportarCsv`, `aplicarRetencion`), `src/app/log/page.tsx`                                                                                                          |
+| SYS-10.2 | Huella: secuencia de eventos originados por un actor en un rango de fechas                                            | `src/lib/events/log.ts` (`footprint`), pestaña Huella en `src/app/log/page.tsx`                                                                                                                              |
+| SYS-11.1 | Alerta de aforo excedido (crítica, inmediata) con notificación al moderador                                           | `src/lib/rules/engine.ts` (condición `aforo`), `src/lib/store.ts` (toast + push)                                                                                                                             |
+| SYS-11.2 | Acuse de recibo de alertas y retorno al estado anterior                                                               | `src/lib/rules/engine.ts` (`acusar`), `src/components/events/evento-card.tsx`, `src/app/alertas/page.tsx`                                                                                                    |
+| SYS-11.3 | Escalamiento a los 10 min sin acuse                                                                                   | `src/lib/store.ts` (`estaEscalado`), indicador en `src/components/events/evento-card.tsx`                                                                                                                    |
+| SYS-11.4 | Vigilancia de perímetro de ventanas (fuera de horario o aula vacía)                                                   | `src/lib/rules/engine.ts` (condición `prox:*`), `src/lib/simulator/profiles.ts` (`proximidadVentanaAt`)                                                                                                      |
+| SYS-11.5 | Canales de notificación: push + adaptadores email/telegram                                                            | `src/lib/notify/channels.ts`, `src/lib/notify/push-client.ts`, `src/app/api/push/*`                                                                                                                          |
+| SYS-12.2 | Roles administrador/visualizador; la API rechaza escrituras del visualizador; privacidad (solo hash, sin identidades) | `src/lib/auth/session.ts`, `src/app/api/session/route.ts`, API de umbrales/push (403), `src/lib/store.ts` (revalidación), `src/app/ajustes/page.tsx` (PIN de demo); PN532 solo representado en datos semilla |
+| SYS-13.1 | Conexión futura al procesador de aula vía MQTT (`utec/aula/{codigo}/{nodo}/{magnitud}`, QoS 1)                        | `src/lib/data/data-source.ts` (`MqttDataSource` stub + TODO), `topicMqtt` en el generador, variables en `.env.example`                                                                                       |
 
 ## Funcionalidades F1–F10
 
-| F | Página / módulo |
-| --- | --- |
-| F1 Dashboard + 8 módulos | `src/app/page.tsx`, `src/components/modules/*`, `src/app/modulo/[id]/page.tsx` |
-| F2 Alertas con acuse y escalamiento | `src/app/alertas/page.tsx` |
-| F3 Pantalla del aula (TV 24") | `src/app/pantalla/[aula]/page.tsx` |
-| F4 Gemelo del aula (plano SVG + tablas) | `src/app/aula/[codigo]/page.tsx`, `src/components/plano/plano-svg.tsx` |
-| F5 Importar plano CSV/DXF/JSON | `src/app/importar/page.tsx`, `src/lib/plano/import.ts` |
-| F6 Log + export CSV + huella | `src/app/log/page.tsx`, `src/lib/events/log.ts` |
-| F7 Simulador (escenarios, velocidad, inyección) | `src/app/simulador/page.tsx`, `src/lib/store.ts` |
-| F8 Ajustes (umbrales, horario, rol, push) | `src/app/ajustes/page.tsx` |
-| F9 Detección de anomalías | `src/lib/anomaly/detector.ts`, `src/components/charts/serie-chart.tsx` |
-| F10 PWA + plan móvil | `src/app/manifest.ts`, `public/sw.js`, `mobile/README.md` |
+| F                                               | Página / módulo                                                                |
+| ----------------------------------------------- | ------------------------------------------------------------------------------ |
+| F1 Dashboard + 8 módulos                        | `src/app/page.tsx`, `src/components/modules/*`, `src/app/modulo/[id]/page.tsx` |
+| F2 Alertas con acuse y escalamiento             | `src/app/alertas/page.tsx`                                                     |
+| F3 Pantalla del aula (TV 24")                   | `src/app/pantalla/[aula]/page.tsx`                                             |
+| F4 Gemelo del aula (plano SVG + tablas)         | `src/app/aula/[codigo]/page.tsx`, `src/components/plano/plano-svg.tsx`         |
+| F5 Importar plano CSV/DXF/JSON                  | `src/app/importar/page.tsx`, `src/lib/plano/import.ts`                         |
+| F6 Log + export CSV + huella                    | `src/app/log/page.tsx`, `src/lib/events/log.ts`                                |
+| F7 Simulador (escenarios, velocidad, inyección) | `src/app/simulador/page.tsx`, `src/lib/store.ts`                               |
+| F8 Ajustes (umbrales, horario, rol, push)       | `src/app/ajustes/page.tsx`                                                     |
+| F9 Detección de anomalías                       | `src/lib/anomaly/detector.ts`, `src/components/charts/serie-chart.tsx`         |
+| F10 PWA + plan móvil                            | `src/app/manifest.ts`, `public/sw.js`, `mobile/README.md`                      |

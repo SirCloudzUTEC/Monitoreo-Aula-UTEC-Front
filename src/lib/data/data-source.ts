@@ -2,8 +2,23 @@
 // functions of time). When the classroom processor's MQTT broker exists,
 // MqttDataSource replaces it without touching the UI or the rule engine.
 
-import type { AulaCodigo, Escenario, Horario, Magnitud, Medicion } from "@/lib/types";
-import { historial, medicionesEnTick, TICK_MS } from "@/lib/simulator/generator";
+import type {
+  AulaCodigo,
+  Escenario,
+  Horario,
+  Magnitud,
+  Medicion,
+} from "@/lib/types";
+import {
+  historial,
+  medicionesEnTick,
+  TICK_MS,
+} from "@/lib/simulator/generator";
+
+export interface ScenarioTransition {
+  at: number;
+  scenario: Escenario;
+}
 
 export interface RangoHistorial {
   desde: Date;
@@ -25,25 +40,64 @@ export interface DataSource {
 export class SimulatedDataSource implements DataSource {
   constructor(
     private opts: {
-      horario: Horario;
+      horario: Horario | (() => Horario);
       escenario: (aula: AulaCodigo) => Escenario;
+      timeline?: (aula: AulaCodigo) => ScenarioTransition[];
     },
   ) {}
 
+  private schedule(): Horario {
+    return typeof this.opts.horario === "function"
+      ? this.opts.horario()
+      : this.opts.horario;
+  }
+
+  private transition(aula: AulaCodigo, ms: number): ScenarioTransition {
+    const changes = this.opts.timeline?.(aula);
+    return (
+      changes?.findLast((change) => change.at <= ms) ?? {
+        at: 0,
+        scenario: changes ? "clase_normal" : this.opts.escenario(aula),
+      }
+    );
+  }
+
   medicionesActuales(aula: AulaCodigo, fecha: Date): Medicion[] {
-    return medicionesEnTick(aula, this.opts.escenario(aula), this.opts.horario, fecha);
+    const change = this.transition(aula, fecha.getTime());
+    return medicionesEnTick(
+      aula,
+      change.scenario,
+      this.schedule(),
+      fecha,
+      change.at || undefined,
+    );
   }
 
   serie(aula: AulaCodigo, magnitud: Magnitud, rango: RangoHistorial) {
-    return historial(
-      aula,
-      this.opts.escenario(aula),
-      this.opts.horario,
-      magnitud,
-      rango.desde,
-      rango.hasta,
-      rango.pasoMs,
-    );
+    if (!Number.isFinite(rango.pasoMs) || rango.pasoMs <= 0)
+      throw new Error("Paso de serie inválido.");
+    const points: { ts: string; t: number; valor: number }[] = [];
+    const schedule = this.schedule();
+    for (
+      let t = Math.floor(rango.desde.getTime() / TICK_MS) * TICK_MS;
+      t < rango.hasta.getTime();
+      t += rango.pasoMs
+    ) {
+      const change = this.transition(aula, t);
+      points.push(
+        ...historial(
+          aula,
+          change.scenario,
+          schedule,
+          magnitud,
+          new Date(t),
+          new Date(t + 1),
+          rango.pasoMs,
+          change.at || undefined,
+        ),
+      );
+    }
+    return points;
   }
 }
 

@@ -1,0 +1,28 @@
+{
+  "L-419": [
+    { "dia": 1, "inicio": "08:00", "fin": "10:00", "curso": "Cálculo II" },
+    { "dia": 1, "inicio": "11:00", "fin": "13:00", "curso": "Física I" },
+    { "dia": 1, "inicio": "15:00", "fin": "17:00", "curso": "Programación" },
+    { "dia": 2, "inicio": "09:00", "fin": "11:00", "curso": "Química General" },
+    { "dia": 2, "inicio": "14:00", "fin": "16:00", "curso": "PI3 - Ing. de Sistemas" },
+    { "dia": 3, "inicio": "08:00", "fin": "10:00", "curso": "Cálculo II" },
+    { "dia": 3, "inicio": "11:00", "fin": "13:00", "curso": "Física I" },
+    { "dia": 3, "inicio": "15:00", "fin": "17:00", "curso": "Programación" },
+    { "dia": 4, "inicio": "09:00", "fin": "11:00", "curso": "Química General" },
+    { "dia": 4, "inicio": "14:00", "fin": "16:00", "curso": "PI3 - Ing. de Sistemas" },
+    { "dia": 5, "inicio": "10:00", "fin": "12:00", "curso": "Taller de Diseño" },
+    { "dia": 5, "inicio": "15:00", "fin": "18:00", "curso": "Laboratorio" }
+  ],
+  "A-1001": [
+    { "dia": 1, "inicio": "09:00", "fin": "11:00", "curso": "Álgebra Lineal" },
+    { "dia": 1, "inicio": "14:00", "fin": "16:00", "curso": "Estadística" },
+    { "dia": 2, "inicio": "08:00", "fin": "10:00", "curso": "Biología" },
+    { "dia": 2, "inicio": "11:00", "fin": "13:00", "curso": "Economía" },
+    { "dia": 3, "inicio": "09:00", "fin": "11:00", "curso": "Álgebra Lineal" },
+    { "dia": 3, "inicio": "14:00", "fin": "16:00", "curso": "Estadística" },
+    { "dia": 4, "inicio": "08:00", "fin": "10:00", "curso": "Biología" },
+    { "dia": 4, "inicio": "11:00", "fin": "13:00", "curso": "Economía" },
+    { "dia": 5, "inicio": "09:00", "fin": "12:00", "curso": "Seminario" },
+    { "dia": 5, "inicio": "14:00", "fin": "16:00", "curso": "Tutoría" }
+  ]
+}

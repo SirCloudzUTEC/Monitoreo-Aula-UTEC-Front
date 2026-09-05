@@ -1,0 +1,145 @@
+{
+  "sensores": [
+    {
+      "id": "sht31",
+      "nombre": "Sensor de temperatura y humedad",
+      "modelo": "Sensirion SHT31",
+      "magnitudes": ["temperatura", "humedad"],
+      "rango": "-40 a 125 °C / 0 a 100 %HR",
+      "exactitud": "±0.2 °C / ±2 %HR",
+      "interfaz": "I2C",
+      "alimentacion": "2.4-5.5 V",
+      "costoAproxUSD": 6
+    },
+    {
+      "id": "scd41",
+      "nombre": "Sensor de CO2",
+      "modelo": "Sensirion SCD41",
+      "magnitudes": ["co2"],
+      "rango": "400 a 5000 ppm",
+      "exactitud": "±(40 ppm + 5 %)",
+      "interfaz": "I2C",
+      "alimentacion": "2.4-5.5 V",
+      "costoAproxUSD": 25
+    },
+    {
+      "id": "sen55",
+      "nombre": "Sensor de material particulado y VOC",
+      "modelo": "Sensirion SEN55",
+      "magnitudes": ["pm25", "voc"],
+      "rango": "PM2.5: 0 a 1000 µg/m³ / VOC: índice 1-500",
+      "exactitud": "±10 % (PM2.5)",
+      "interfaz": "I2C / UART",
+      "alimentacion": "5 V",
+      "costoAproxUSD": 30
+    },
+    {
+      "id": "veml7700",
+      "nombre": "Sensor de luz ambiental",
+      "modelo": "Vishay VEML7700",
+      "magnitudes": ["lux"],
+      "rango": "0 a 120 000 lx",
+      "exactitud": "±10 %",
+      "interfaz": "I2C",
+      "alimentacion": "2.5-3.6 V",
+      "costoAproxUSD": 4
+    },
+    {
+      "id": "inmp441",
+      "nombre": "Micrófono MEMS (ruido LAeq)",
+      "modelo": "InvenSense INMP441",
+      "magnitudes": ["ruido"],
+      "rango": "33 a 120 dBA",
+      "exactitud": "±1 dB (SNR 61 dB)",
+      "interfaz": "I2S",
+      "alimentacion": "1.8-3.3 V",
+      "costoAproxUSD": 5
+    },
+    {
+      "id": "ld2410c",
+      "nombre": "Radar de presencia mmWave",
+      "modelo": "HLK-LD2410C",
+      "magnitudes": ["presencia", "proximidad_ventana"],
+      "rango": "0 a 6 m",
+      "exactitud": "±0.05 m",
+      "interfaz": "UART / GPIO",
+      "alimentacion": "5 V",
+      "costoAproxUSD": 5
+    },
+    {
+      "id": "vl53l1x",
+      "nombre": "Contador bidireccional ToF (2 unidades)",
+      "modelo": "ST VL53L1X ×2",
+      "magnitudes": ["ocupacion"],
+      "rango": "0.04 a 4 m",
+      "exactitud": "±25 mm",
+      "interfaz": "I2C",
+      "alimentacion": "2.6-3.5 V",
+      "costoAproxUSD": 14
+    },
+    {
+      "id": "reed",
+      "nombre": "Interruptor magnético de puerta",
+      "modelo": "Reed switch NC",
+      "magnitudes": ["puerta"],
+      "rango": "abierta / cerrada",
+      "exactitud": "binario",
+      "interfaz": "GPIO",
+      "alimentacion": "3.3 V",
+      "costoAproxUSD": 2
+    },
+    {
+      "id": "pn532",
+      "nombre": "Lector RFID (guarda hash, nunca identidad)",
+      "modelo": "NXP PN532",
+      "magnitudes": [],
+      "rango": "13.56 MHz, ~5 cm",
+      "exactitud": "n/a",
+      "interfaz": "I2C / SPI",
+      "alimentacion": "3.3-5 V",
+      "costoAproxUSD": 8
+    }
+  ],
+  "nodos": [
+    {
+      "id": "nodoAmbiental",
+      "nombre": "Nodo Ambiental",
+      "mcu": "ESP32",
+      "conectividad": "Wi-Fi (MQTT QoS 1)",
+      "alimentacion": "5 V USB",
+      "sensores": ["sht31", "scd41", "sen55", "veml7700", "inmp441", "ld2410c"]
+    },
+    {
+      "id": "nodoPuerta",
+      "nombre": "Nodo Puerta",
+      "mcu": "ESP32-C3",
+      "conectividad": "BLE",
+      "alimentacion": "Batería Li-ion (reporta %)",
+      "sensores": ["vl53l1x", "reed", "pn532"]
+    },
+    {
+      "id": "nodoVentana1",
+      "nombre": "Nodo Ventana 1",
+      "mcu": "ESP32-C3",
+      "conectividad": "BLE",
+      "alimentacion": "Batería Li-ion (reporta %)",
+      "sensores": ["ld2410c"]
+    },
+    {
+      "id": "nodoVentana2",
+      "nombre": "Nodo Ventana 2",
+      "mcu": "ESP32-C3",
+      "conectividad": "BLE",
+      "alimentacion": "Batería Li-ion (reporta %)",
+      "sensores": ["ld2410c"]
+    },
+    {
+      "id": "procesadorAula",
+      "nombre": "Procesador de Aula",
+      "mcu": "Raspberry Pi 4",
+      "conectividad": "Ethernet / Wi-Fi (broker MQTT, HDMI)",
+      "alimentacion": "5 V 3 A",
+      "sensores": []
+    }
+  ]
+}

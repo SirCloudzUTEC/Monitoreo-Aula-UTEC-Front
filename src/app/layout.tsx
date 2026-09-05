@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
+import { Providers } from "@/components/providers";
+import { AppShell } from "@/components/layout/app-shell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,8 +15,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Monitoreo del Aula | Panel Operaciones UTEC",
-  description: "Panel de administradores para el monitoreo de aulas instrumentadas de UTEC.",
+  title: {
+    default: "Aula Digital UTEC",
+    template: "%s · Aula Digital UTEC",
+  },
+  description:
+    "Gemelo digital de las aulas instrumentadas L-419 y A-1001: confort, calidad de aire, aforo, accesos y seguridad en tiempo real.",
+  applicationName: "Aula Digital UTEC",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Aula Digital UTEC", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -27,11 +40,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster richColors closeButton position="top-right" />
-        </ThemeProvider>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );

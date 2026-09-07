@@ -10,6 +10,7 @@ for (const path of [
   "/log",
   "/simulador",
   "/asistente",
+  "/acceso",
 ]) {
   test(`desktop route ${path} loads without JavaScript errors`, async ({
     page,

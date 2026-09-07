@@ -1,0 +1,64 @@
+[
+  {
+    "codigo": "L-419",
+    "nombre": "Aula L-419",
+    "largo": 10,
+    "ancho": 6,
+    "alto": 3,
+    "aforo": 40,
+    "puertas": 1,
+    "ventanas": 2,
+    "aireAcondicionado": true,
+    "nodos": ["nodoAmbiental", "nodoPuerta", "nodoVentana1", "nodoVentana2", "procesadorAula"],
+    "posiciones": {
+      "nodoAmbiental": { "x": 5, "y": 3 },
+      "nodoPuerta": { "x": 0.3, "y": 5.2 },
+      "nodoVentana1": { "x": 3, "y": 0.2 },
+      "nodoVentana2": { "x": 7, "y": 0.2 },
+      "procesadorAula": { "x": 9.5, "y": 5.5 },
+      "puerta": { "x": 0, "y": 5 },
+      "ventana1": { "x": 2.5, "y": 0 },
+      "ventana2": { "x": 6.5, "y": 0 },
+      "proyector": { "x": 5, "y": 2 },
+      "pantallaLocal": { "x": 9.7, "y": 5 }
+    },
+    "componentes": [
+      { "id": "proyector", "nombre": "Proyector", "cantidad": 1, "pos": { "x": 5, "y": 2 } },
+      { "id": "luminarias", "nombre": "Luminarias LED", "cantidad": 8 },
+      { "id": "computadoras", "nombre": "Computadora de docente", "cantidad": 1 },
+      { "id": "enchufes", "nombre": "Enchufes dobles", "cantidad": 6 },
+      { "id": "cajaElectrica", "nombre": "Caja eléctrica", "cantidad": 1, "pos": { "x": 9.7, "y": 0.3 } },
+      { "id": "mesas", "nombre": "Mesas", "cantidad": 20 },
+      { "id": "pantallaLocal", "nombre": "Pantalla local 24\" (HDMI)", "cantidad": 1, "pos": { "x": 9.7, "y": 5 } }
+    ]
+  },
+  {
+    "codigo": "A-1001",
+    "nombre": "Aula A-1001",
+    "largo": 10,
+    "ancho": 6,
+    "alto": 3,
+    "aforo": 40,
+    "puertas": 1,
+    "ventanas": 0,
+    "aireAcondicionado": false,
+    "nodos": ["nodoAmbiental", "nodoPuerta", "procesadorAula"],
+    "posiciones": {
+      "nodoAmbiental": { "x": 5, "y": 3 },
+      "nodoPuerta": { "x": 0.3, "y": 5.2 },
+      "procesadorAula": { "x": 9.5, "y": 5.5 },
+      "puerta": { "x": 0, "y": 5 },
+      "proyector": { "x": 5, "y": 2 },
+      "pantallaLocal": { "x": 9.7, "y": 5 }
+    },
+    "componentes": [
+      { "id": "proyector", "nombre": "Proyector", "cantidad": 1, "pos": { "x": 5, "y": 2 } },
+      { "id": "luminarias", "nombre": "Luminarias LED", "cantidad": 8 },
+      { "id": "computadoras", "nombre": "Computadora de docente", "cantidad": 1 },
+      { "id": "enchufes", "nombre": "Enchufes dobles", "cantidad": 6 },
+      { "id": "cajaElectrica", "nombre": "Caja eléctrica", "cantidad": 1, "pos": { "x": 9.7, "y": 0.3 } },
+      { "id": "mesas", "nombre": "Mesas", "cantidad": 20 },
+      { "id": "pantallaLocal", "nombre": "Pantalla local 24\" (HDMI)", "cantidad": 1, "pos": { "x": 9.7, "y": 5 } }
+    ]
+  }
+]

@@ -1,11 +1,11 @@
 "use client";
 
-// Assistant surface: immersive orb + chat composer.
-// Providers are NOT connected yet — the UI says so honestly and no
-// simulated AI responses are produced. Microphone starts OFF and voice
-// mode stays disabled until a real audio pipeline exists.
+// Assistant surface: immersive orb + chat composer backed by /api/asistente.
+// Availability comes from the SERVER (which providers have keys configured);
+// messages go through the real API and pending providers produce an honest
+// 501/503 notice, never a simulated AI reply. Microphone starts OFF.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MicOffIcon, SendIcon } from "lucide-react";
 import { ParticleOrb, type OrbState } from "@/components/assistant/particle-orb";
 import { Button } from "@/components/ui/button";
@@ -23,29 +23,65 @@ interface ProviderOption {
   disponible: boolean;
 }
 
-// Real availability is decided server-side once API keys are configured.
-const PROVEEDORES: ProviderOption[] = [
-  { id: "anthropic", etiqueta: "Anthropic · Claude", disponible: false },
-  { id: "openai", etiqueta: "OpenAI · GPT", disponible: false },
-  { id: "xai", etiqueta: "xAI · Grok", disponible: false },
-];
+interface Aviso {
+  id: number;
+  texto: string;
+}
 
 export default function AsistentePage() {
+  const [proveedores, setProveedores] = useState<ProviderOption[]>([]);
   const [proveedor, setProveedor] = useState<string>("anthropic");
   const [mensaje, setMensaje] = useState("");
-  const [avisos, setAvisos] = useState<string[]>([]);
-  const estado: OrbState = "listo";
+  const [avisos, setAvisos] = useState<Aviso[]>([]);
+  const [estado, setEstado] = useState<OrbState>("listo");
 
-  const enviar = () => {
+  useEffect(() => {
+    let cancelado = false;
+    fetch("/api/asistente")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelado && data?.proveedores) setProveedores(data.proveedores);
+      })
+      .catch(() => {
+        // Availability stays unknown; the composer still explains pending state on send.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  const avisar = (texto: string) =>
+    setAvisos((prev) => [...prev.slice(-3), { id: Date.now(), texto }]);
+
+  const enviar = async () => {
     const texto = mensaje.trim();
-    if (!texto) return;
-    // No provider is configured yet: state that clearly instead of faking a reply.
-    setAvisos((prev) => [
-      ...prev.slice(-4),
-      "El asistente aún no tiene un proveedor de IA conectado. Este mensaje no fue enviado.",
-    ]);
-    setMensaje("");
+    if (!texto || estado === "procesando") return;
+    setEstado("procesando");
+    try {
+      const res = await fetch("/api/asistente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mensaje: texto, proveedor }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        avisar(
+          data?.error ??
+            "No se pudo contactar al asistente. Inténtalo nuevamente.",
+        );
+        setEstado(data?.pendiente ? "listo" : "error");
+        if (!data?.pendiente) return;
+      }
+      setMensaje("");
+      setEstado("listo");
+    } catch {
+      avisar("Sin conexión con el servidor. El mensaje no fue enviado.");
+      setEstado("error");
+    }
   };
+
+  const etiquetaProveedor = (p: ProviderOption) =>
+    `${p.etiqueta}${p.disponible ? "" : " · pendiente"}`;
 
   return (
     <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-between gap-6 py-4">
@@ -70,12 +106,12 @@ export default function AsistentePage() {
       <div className="w-full max-w-2xl space-y-3">
         {avisos.length > 0 && (
           <ul className="space-y-1" aria-live="polite">
-            {avisos.map((aviso, i) => (
+            {avisos.map((aviso) => (
               <li
-                key={i}
+                key={aviso.id}
                 className="rounded-md border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-200"
               >
-                {aviso}
+                {aviso.texto}
               </li>
             ))}
           </ul>
@@ -85,16 +121,24 @@ export default function AsistentePage() {
           <div className="flex flex-col gap-2">
             <Select value={proveedor} onValueChange={setProveedor}>
               <SelectTrigger
-                className="h-8 w-44 text-xs"
+                className="h-8 w-48 text-xs"
                 aria-label="Proveedor y modelo de IA"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROVEEDORES.map((p) => (
+                {(proveedores.length > 0
+                  ? proveedores
+                  : [
+                      {
+                        id: "anthropic",
+                        etiqueta: "Anthropic · Claude",
+                        disponible: false,
+                      },
+                    ]
+                ).map((p) => (
                   <SelectItem key={p.id} value={p.id} className="text-xs">
-                    {p.etiqueta}
-                    {!p.disponible && " · pendiente"}
+                    {etiquetaProveedor(p)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -102,7 +146,7 @@ export default function AsistentePage() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 w-44 justify-start gap-2 text-xs text-muted-foreground"
+              className="h-8 w-48 justify-start gap-2 text-xs text-muted-foreground"
               disabled
               title="La conversación por voz se habilitará cuando exista captura de audio real y consentida"
             >
@@ -116,7 +160,7 @@ export default function AsistentePage() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                enviar();
+                void enviar();
               }
             }}
             rows={2}
@@ -125,16 +169,16 @@ export default function AsistentePage() {
             className="min-h-16 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <Button
-            onClick={enviar}
+            onClick={() => void enviar()}
             size="icon"
             aria-label="Enviar mensaje"
-            disabled={mensaje.trim().length === 0}
+            disabled={mensaje.trim().length === 0 || estado === "procesando"}
           >
             <SendIcon className="size-4" aria-hidden />
           </Button>
         </div>
         <p className="text-center text-xs text-muted-foreground">
-          Los proveedores de IA se conectarán con claves del servidor; ninguna
+          Los proveedores de IA se conectan con claves del servidor; ninguna
           clave se expone en el navegador.
         </p>
       </div>

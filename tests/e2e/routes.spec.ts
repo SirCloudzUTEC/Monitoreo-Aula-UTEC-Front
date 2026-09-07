@@ -9,6 +9,7 @@ for (const path of [
   "/importar",
   "/log",
   "/simulador",
+  "/asistente",
 ]) {
   test(`desktop route ${path} loads without JavaScript errors`, async ({
     page,

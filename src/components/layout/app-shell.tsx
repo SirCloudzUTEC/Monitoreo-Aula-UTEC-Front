@@ -5,6 +5,7 @@
 // The TV view (/pantalla/*) renders without any chrome.
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   BellIcon,
@@ -15,6 +16,7 @@ import {
   ScrollTextIcon,
   Settings2Icon,
   SlidersHorizontalIcon,
+  SparklesIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: "/", etiqueta: "Inicio", icono: HouseIcon },
+  { href: "/asistente", etiqueta: "Asistente", icono: SparklesIcon },
   { href: "/alertas", etiqueta: "Alertas", icono: BellIcon, conAlertas: true },
   {
     href: "/aula/L-419",
@@ -83,9 +86,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center gap-3 px-4">
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <MonitorIcon className="size-5 text-primary" aria-hidden />
-            <span className="hidden sm:inline">Aula Digital UTEC</span>
-            <span className="sm:hidden">Aula Digital</span>
+            <Image
+              src="/brand/utec-logo.png"
+              alt="UTEC"
+              width={72}
+              height={34}
+              priority
+              className="h-7 w-auto dark:brightness-0 dark:invert"
+            />
+            <span className="hidden border-l pl-2 text-sm font-medium text-muted-foreground sm:inline">
+              Campus Digital
+            </span>
           </Link>
           <div className="ml-auto flex items-center gap-2 text-sm">
             {CODIGOS_AULA.map((a) => (

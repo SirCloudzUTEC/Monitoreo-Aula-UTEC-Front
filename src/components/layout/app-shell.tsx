@@ -15,6 +15,7 @@ import {
   MonitorIcon,
   ScrollTextIcon,
   Settings2Icon,
+  SirenIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
 } from "lucide-react";
@@ -38,6 +39,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/", etiqueta: "Inicio", icono: HouseIcon },
   { href: "/asistente", etiqueta: "Asistente", icono: SparklesIcon },
+  { href: "/reportar", etiqueta: "Reportar", icono: SirenIcon },
   { href: "/alertas", etiqueta: "Alertas", icono: BellIcon, conAlertas: true },
   {
     href: "/aula/L-419",

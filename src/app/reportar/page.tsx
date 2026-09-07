@@ -1,11 +1,11 @@
 "use client";
 
-// Community incident reporting: any member can report; the platform
-// shows exactly which operational team will be notified. Reports are
-// stored locally for now (demo); server persistence arrives with Neon.
+// Community incident reporting backed by /api/reportes (Neon PostgreSQL).
+// The page shows exactly which operational team is notified, and reports
+// honestly whether the database stored the report.
 
-import { useState } from "react";
-import { SirenIcon, SendIcon, PhoneCallIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { SirenIcon, SendIcon, PhoneCallIcon, DatabaseIcon } from "lucide-react";
 import {
   CATALOGO_INCIDENTES,
   CATEGORIAS_ORDENADAS,
@@ -22,12 +22,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface ReporteLocal {
+interface ReporteGuardado {
   id: number;
   categoria: CategoriaIncidente;
   ubicacion: string;
   descripcion: string;
-  ts: string;
 }
 
 const CLASE_PRIORIDAD: Record<string, string> = {
@@ -42,27 +41,62 @@ export default function ReportarPage() {
   const [ubicacion, setUbicacion] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [enviados, setEnviados] = useState<ReporteLocal[]>([]);
+  const [enviando, setEnviando] = useState(false);
+  const [guardados, setGuardados] = useState<ReporteGuardado[]>([]);
+  const [bd, setBd] = useState<{ configurada: boolean; total: number } | null>(null);
 
   const info = CATALOGO_INCIDENTES[categoria];
 
-  const enviar = () => {
+  useEffect(() => {
+    let cancelado = false;
+    fetch("/api/reportes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelado && data) setBd(data);
+      })
+      .catch(() => {
+        // Status stays unknown; submitting still reports the real outcome.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  const enviar = async () => {
     const r = validarBorrador({ categoria, ubicacion, descripcion });
     if (!r.ok) {
       setError(r.error);
       return;
     }
     setError(null);
-    setEnviados((prev) => [
-      {
-        id: prev.length + 1,
-        ...r.borrador,
-        ts: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-    setUbicacion("");
-    setDescripcion("");
+    setEnviando(true);
+    try {
+      const res = await fetch("/api/reportes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(r.borrador),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(
+          data?.error ?? "No se pudo enviar el reporte. Inténtalo nuevamente.",
+        );
+        return;
+      }
+      setGuardados((prev) => [
+        { id: data.id, ...r.borrador },
+        ...prev,
+      ]);
+      setBd((prev) =>
+        prev ? { ...prev, total: prev.total + 1 } : prev,
+      );
+      setUbicacion("");
+      setDescripcion("");
+    } catch {
+      setError("Sin conexión con el servidor. El reporte no fue enviado.");
+    } finally {
+      setEnviando(false);
+    }
   };
 
   return (
@@ -76,6 +110,14 @@ export default function ReportarPage() {
           Tu reporte llega al personal correspondiente según la categoría.
           En emergencias graves llama primero a Seguridad UTEC o al 105/106.
         </p>
+        {bd && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <DatabaseIcon className="size-3.5" aria-hidden />
+            {bd.configurada
+              ? `Base de datos conectada · ${bd.total} reporte${bd.total === 1 ? "" : "s"} registrado${bd.total === 1 ? "" : "s"}`
+              : "Base de datos pendiente de configurar en este entorno"}
+          </p>
+        )}
       </header>
 
       <div className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
@@ -156,27 +198,35 @@ export default function ReportarPage() {
           </p>
         )}
 
-        <Button onClick={enviar} className="w-full gap-2 sm:w-auto">
+        <Button
+          onClick={() => void enviar()}
+          disabled={enviando}
+          className="w-full gap-2 sm:w-auto"
+        >
           <SendIcon className="size-4" aria-hidden />
-          Enviar reporte
+          {enviando ? "Enviando…" : "Enviar reporte"}
         </Button>
         <p className="text-xs text-muted-foreground">
-          Demostración: el reporte queda registrado localmente. El envío real al
-          personal se activará con la base de datos y las notificaciones.
+          Mientras el inicio de sesión institucional está pendiente, los
+          reportes se registran como demostración, sin identificar al autor.
         </p>
       </div>
 
-      {enviados.length > 0 && (
+      {guardados.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold">Reportes enviados en esta sesión</h2>
+          <h2 className="text-sm font-semibold">
+            Reportes guardados en la base de datos
+          </h2>
           <ul className="space-y-2">
-            {enviados.map((r) => (
+            {guardados.map((r) => (
               <li
                 key={r.id}
                 className="rounded-lg border bg-card px-3 py-2 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <strong>{CATALOGO_INCIDENTES[r.categoria].nombre}</strong>
+                  <strong>
+                    #{r.id} · {CATALOGO_INCIDENTES[r.categoria].nombre}
+                  </strong>
                   <span className="text-xs text-muted-foreground">
                     {r.ubicacion} · notificado a {destinatariosDe(r.categoria)}
                   </span>

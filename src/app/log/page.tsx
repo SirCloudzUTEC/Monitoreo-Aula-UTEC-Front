@@ -34,6 +34,7 @@ import {
   RETENCION_DIAS,
   type LogRow,
 } from "@/lib/events/log";
+import { descargarArchivo } from "@/lib/data/storage";
 import { fechaHoraDeIso } from "@/lib/format";
 import type { AulaCodigo, Severidad } from "@/lib/types";
 
@@ -112,13 +113,7 @@ export default function LogPage() {
     // export what is filtered (order: chronological, as stored)
     const rows = filtrarLog(log, { aula, severidad: sev, texto: texto || undefined });
     const csv = exportarCsv(rows);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = nombreArchivoCsv(aula);
-    a.click();
-    URL.revokeObjectURL(url);
+    descargarArchivo(nombreArchivoCsv(aula), csv, "text/csv;charset=utf-8");
   };
 
   return (

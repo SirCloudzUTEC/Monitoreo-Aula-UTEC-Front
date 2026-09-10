@@ -23,21 +23,11 @@ import {
   PLANTILLA_JSON,
   type ResultadoImport,
 } from "@/lib/plano/import";
-import { saveLocal } from "@/lib/data/storage";
+import { descargarArchivo, saveLocal } from "@/lib/data/storage";
 import { getAula } from "@/lib/simulator/profiles";
 import { CODIGOS_AULA, useApp } from "@/lib/store";
 import { useOnline } from "@/lib/use-online";
 import type { AulaCodigo } from "@/lib/types";
-
-function descargar(nombre: string, contenido: string, tipo: string) {
-  const blob = new Blob([contenido], { type: tipo });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nombre;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export default function ImportarPage() {
   const admin = useApp((s) => s.rol === "administrador");
@@ -128,7 +118,7 @@ export default function ImportarPage() {
               variant="outline"
               size="sm"
               onClick={() =>
-                descargar("plantilla_plano.csv", PLANTILLA_CSV, "text/csv")
+                descargarArchivo("plantilla_plano.csv", PLANTILLA_CSV, "text/csv")
               }
             >
               <DownloadIcon className="size-4" aria-hidden /> Plantilla CSV
@@ -137,7 +127,7 @@ export default function ImportarPage() {
               variant="outline"
               size="sm"
               onClick={() =>
-                descargar(
+                descargarArchivo(
                   "plantilla_plano.json",
                   PLANTILLA_JSON,
                   "application/json",

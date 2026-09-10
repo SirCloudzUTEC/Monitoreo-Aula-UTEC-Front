@@ -31,13 +31,11 @@ En **Ajustes → Entrar como administrador**, introduce el PIN configurado en el
 
 **Es una demo con PIN compartido, no autenticación institucional.** No usar para decisiones operativas, acceso físico ni datos privados. Antes de uso real hacen falta cuentas, autorización centralizada, control de intentos y persistencia compartida.
 
-## Pruebas y compilación
+## Ejecutar en local
 
 ```bash
-npm test
-npm run lint
-npm run typecheck
-npm run build
+npm install
+npm run dev
 ```
 
 Para probar la PWA y las pruebas E2E, usa el build de producción (el service worker no se registra con `npm run dev`):

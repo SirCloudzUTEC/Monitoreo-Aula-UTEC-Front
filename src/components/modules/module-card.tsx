@@ -39,16 +39,16 @@ function FilaAula({
   return (
     <div className="flex items-center gap-3">
       <span
-        className={cn("size-2.5 shrink-0 rounded-full", CLASE_SEMAFORO[semaforo])}
+        className={cn("size-3 shrink-0 rounded-full", CLASE_SEMAFORO[semaforo])}
         title={ETIQUETA_SEMAFORO[semaforo]}
         aria-label={`${aula}: ${ETIQUETA_SEMAFORO[semaforo]}`}
       />
-      <div className="w-16 shrink-0 text-xs text-muted-foreground">{aula}</div>
-      <div className="w-24 shrink-0 font-mono text-sm font-semibold tabular-nums">
+      <div className="w-16 shrink-0 text-sm text-muted-foreground">{aula}</div>
+      <div className="w-24 shrink-0 font-mono text-base font-semibold tabular-nums">
         {formatearValor(info.principal, valor)}
       </div>
       <div className="min-w-0 flex-1">
-        <Sparkline data={serie} height={32} />
+        <Sparkline data={serie} height={36} />
       </div>
     </div>
   );
@@ -75,12 +75,12 @@ export function ModuleCard({ modulo }: { modulo: ModuloId }) {
   return (
     <Link href={`/modulo/${modulo}`} className="block">
       <Card className="h-full transition-shadow hover:shadow-md">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <ModuleIcon modulo={modulo} className="size-4 text-muted-foreground" />
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <ModuleIcon modulo={modulo} className="size-5 text-muted-foreground" />
             {info.titulo}
             <span
-              className={cn("ml-auto size-2.5 rounded-full", CLASE_SEMAFORO[agregado])}
+              className={cn("ml-auto size-3 rounded-full", CLASE_SEMAFORO[agregado])}
               title={ETIQUETA_SEMAFORO[agregado]}
             />
             {nAlertas > 0 && (
@@ -89,8 +89,13 @@ export function ModuleCard({ modulo }: { modulo: ModuloId }) {
               </Badge>
             )}
           </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            {agregado === "verde"
+              ? "Dentro de rango en ambas aulas"
+              : `Estado: ${ETIQUETA_SEMAFORO[agregado].toLowerCase()}`}
+          </p>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+        <CardContent className="flex flex-col gap-3">
           {CODIGOS_AULA.map((a) => (
             <FilaAula key={a} aula={a} modulo={modulo} semaforo={semaforos[a]} />
           ))}

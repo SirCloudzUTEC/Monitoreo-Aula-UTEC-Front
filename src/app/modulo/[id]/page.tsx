@@ -59,40 +59,48 @@ export default function ModuloPage() {
   );
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <ModuleIcon modulo={modulo} className="size-6 text-primary" />
-        <h1 className="text-xl font-semibold">{info.titulo}</h1>
-        <Tabs value={rango} onValueChange={(v) => setRango(v as RangoId)} className="ml-auto">
-          <TabsList>
-            {(Object.keys(RANGOS) as RangoId[]).map((r) => (
-              <TabsTrigger key={r} value={r}>
-                {RANGOS[r].etiqueta}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+    <div className="mx-auto flex max-w-5xl flex-col gap-8">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <ModuleIcon modulo={modulo} className="size-8 text-primary" />
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">{info.titulo}</h1>
+          <Tabs value={rango} onValueChange={(v) => setRango(v as RangoId)} className="ml-auto">
+            <TabsList>
+              {(Object.keys(RANGOS) as RangoId[]).map((r) => (
+                <TabsTrigger key={r} value={r}>
+                  {RANGOS[r].etiqueta}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+        <p className="text-base text-muted-foreground">
+          {evs.length === 0
+            ? "Sin alertas abiertas en este módulo."
+            : `${evs.length} alerta${evs.length === 1 ? "" : "s"} abierta${evs.length === 1 ? "" : "s"} en este módulo.`}{" "}
+          Viendo {RANGOS[rango].etiqueta.toLowerCase()} en {aulas.length} aula{aulas.length === 1 ? "" : "s"}.
+        </p>
       </div>
 
       <Card>
-        <CardContent className="pt-4 text-sm text-muted-foreground">
+        <CardContent className="pt-4 text-base text-muted-foreground">
           {info.explicacion}
         </CardContent>
       </Card>
 
       {aulas.map((aula) => (
         <Card key={aula}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-xl">
               <Link href={`/aula/${aula}`} className="hover:underline">
                 {getAula(aula).nombre}
               </Link>
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-6">
+          <CardContent className="flex flex-col gap-8">
             {info.magnitudes.map((m) => (
               <div key={m}>
-                <h3 className="mb-1 text-sm font-medium">{ETIQUETA_MAGNITUD[m]}</h3>
+                <h3 className="mb-2 text-base font-medium">{ETIQUETA_MAGNITUD[m]}</h3>
                 <ChartAula aula={aula} magnitud={m} rango={rango} />
               </div>
             ))}
@@ -106,11 +114,11 @@ export default function ModuloPage() {
       )}
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Umbrales aplicables</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Umbrales aplicables</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="grid gap-1 text-sm sm:grid-cols-2">
+          <ul className="grid gap-2 text-base sm:grid-cols-2">
             {info.magnitudes.flatMap((m) =>
               lineasUmbral(m, umbrales).map((l) => (
                 <li key={`${m}-${l.etiqueta}`} className="text-muted-foreground">
@@ -119,7 +127,7 @@ export default function ModuloPage() {
               )),
             )}
           </ul>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-3 text-sm text-muted-foreground">
             Los umbrales se editan en{" "}
             <Link href="/ajustes" className="underline">
               Ajustes
@@ -130,7 +138,7 @@ export default function ModuloPage() {
       </Card>
 
       <section aria-label="Alertas abiertas del módulo">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">
+        <h2 className="mb-3 text-lg font-semibold">
           Alertas abiertas ({evs.length})
         </h2>
         {evs.length === 0 ? (

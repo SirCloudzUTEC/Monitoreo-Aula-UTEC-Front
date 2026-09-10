@@ -78,21 +78,23 @@ export default function ImportarPage() {
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <FileUpIcon className="size-6 text-primary" aria-hidden />
-        <h1 className="text-xl font-semibold">Importar plano</h1>
+    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-3">
+          <FileUpIcon className="size-7 text-primary" aria-hidden />
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Importar plano</h1>
+        </div>
+        <p className="text-base text-muted-foreground">
+          Sube el contorno del aula como <strong>CSV</strong> (un punto “x,y” por
+          línea, en metros), <strong>DXF</strong> (solo entidades LINE y
+          LWPOLYLINE) o <strong>JSON</strong> (polígono). Se muestra una vista
+          previa y puedes guardarlo para el plano del aula.
+        </p>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Sube el contorno del aula como <strong>CSV</strong> (un punto “x,y” por
-        línea, en metros), <strong>DXF</strong> (solo entidades LINE y
-        LWPOLYLINE) o <strong>JSON</strong> (polígono). Se muestra una vista
-        previa y puedes guardarlo para el plano del aula.
-      </p>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">1 · Elige aula y archivo</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">1 · Elige aula y archivo</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Select value={aula} onValueChange={(v) => setAula(v as AulaCodigo)}>
@@ -149,8 +151,8 @@ export default function ImportarPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">2 · Vista previa</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">2 · Vista previa</CardTitle>
         </CardHeader>
         <CardContent>
           {resultado ? (

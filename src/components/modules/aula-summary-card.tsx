@@ -28,13 +28,13 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Link href={`/aula/${aula}`} className="hover:underline">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-3 text-xl">
+          <Link href={`/aula/${aula}`} className="font-semibold hover:underline">
             {spec.nombre}
           </Link>
           <span
-            className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", CLASE_ESTADO[estado])}
+            className={cn("rounded-full px-3 py-0.5 text-sm font-medium", CLASE_ESTADO[estado])}
           >
             {ETIQUETA_ESTADO[estado]}
           </span>
@@ -45,11 +45,11 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
             className="ml-auto text-muted-foreground hover:text-foreground"
             title="Abrir pantalla del aula (TV)"
           >
-            <MonitorIcon className="size-4" aria-hidden />
+            <MonitorIcon className="size-5" aria-hidden />
           </a>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-sm">
+      <CardContent className="flex flex-col gap-4 text-base">
         <div className="flex items-center gap-2 text-muted-foreground">
           <CalendarClockIcon className="size-4 shrink-0" aria-hidden />
           {bloque ? (
@@ -68,24 +68,30 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
           )}
         </div>
         <div>
-          <div className="mb-1 flex items-center gap-2">
+          <div className="mb-1.5 flex items-center gap-2">
             <UsersIcon className="size-4 text-muted-foreground" aria-hidden />
-            <span className="tabular-nums">
+            <span className="font-medium tabular-nums">
               {ocupacion} / {spec.aforo} personas
             </span>
             {ocupacion > spec.aforo && (
-              <span className="text-xs font-semibold text-red-600">¡Aforo excedido!</span>
+              <span className="text-sm font-semibold text-red-600">¡Aforo excedido!</span>
             )}
           </div>
           <Progress value={Math.min(100, (ocupacion / spec.aforo) * 100)} />
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center">
-          {(["temperatura", "co2", "ruido"] as const).map((m) => (
-            <div key={m} className="rounded-md bg-muted/50 p-2">
+        <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+          {(["temperatura", "humedad", "co2", "ruido"] as const).map((m) => (
+            <div key={m} className="rounded-lg bg-muted/50 p-3">
               <div className="text-xs text-muted-foreground">
-                {m === "temperatura" ? "Temperatura" : m === "co2" ? "CO₂" : "Ruido"}
+                {m === "temperatura"
+                  ? "Temperatura"
+                  : m === "humedad"
+                    ? "Humedad"
+                    : m === "co2"
+                      ? "CO₂"
+                      : "Ruido"}
               </div>
-              <div className="font-mono text-sm font-semibold tabular-nums">
+              <div className="font-mono text-base font-semibold tabular-nums">
                 {formatearValor(m, valores[m])}
               </div>
             </div>

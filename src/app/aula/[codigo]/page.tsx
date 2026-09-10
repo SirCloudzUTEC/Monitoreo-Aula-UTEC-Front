@@ -49,44 +49,46 @@ export default function AulaPage() {
   const sensores = SENSORES.filter((s) => sensorIds.has(s.id));
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">{aula.nombre}</h1>
-        <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", CLASE_ESTADO[estado])}>
-          {ETIQUETA_ESTADO[estado]}
-        </span>
-        <a
-          href={`/pantalla/${codigo}`}
-          target="_blank"
-          rel="noopener"
-          className="ml-auto text-sm text-muted-foreground underline hover:text-foreground"
-        >
-          Ver pantalla TV ↗
-        </a>
-      </div>
+    <div className="mx-auto flex max-w-6xl flex-col gap-8">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">{aula.nombre}</h1>
+          <span className={cn("rounded-full px-3 py-0.5 text-sm font-medium", CLASE_ESTADO[estado])}>
+            {ETIQUETA_ESTADO[estado]}
+          </span>
+          <a
+            href={`/pantalla/${codigo}`}
+            target="_blank"
+            rel="noopener"
+            className="ml-auto text-sm text-muted-foreground underline hover:text-foreground"
+          >
+            Ver pantalla TV ↗
+          </a>
+        </div>
 
-      <div className="grid gap-2 text-sm sm:grid-cols-4">
-        <Badge variant="secondary" className="justify-center py-1">
-          {aula.largo} × {aula.ancho} × {aula.alto} m
-        </Badge>
-        <Badge variant="secondary" className="justify-center py-1">
-          Aforo: {aula.aforo} personas
-        </Badge>
-        <Badge variant="secondary" className="justify-center py-1">
-          {aula.ventanas} ventana{aula.ventanas === 1 ? "" : "s"} · {aula.puertas} puerta
-        </Badge>
-        <Badge variant="secondary" className="justify-center py-1">
-          {aula.aireAcondicionado ? "Con aire acondicionado" : "Sin aire acondicionado"}
-        </Badge>
+        <div className="grid gap-2 text-sm sm:grid-cols-4">
+          <Badge variant="secondary" className="justify-center py-1.5 text-sm">
+            {aula.largo} × {aula.ancho} × {aula.alto} m
+          </Badge>
+          <Badge variant="secondary" className="justify-center py-1.5 text-sm">
+            Aforo: {aula.aforo} personas
+          </Badge>
+          <Badge variant="secondary" className="justify-center py-1.5 text-sm">
+            {aula.ventanas} ventana{aula.ventanas === 1 ? "" : "s"} · {aula.puertas} puerta
+          </Badge>
+          <Badge variant="secondary" className="justify-center py-1.5 text-sm">
+            {aula.aireAcondicionado ? "Con aire acondicionado" : "Sin aire acondicionado"}
+          </Badge>
+        </div>
       </div>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Plano 2D</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Plano 2D</CardTitle>
         </CardHeader>
         <CardContent>
           <PlanoSvg aula={aula} plano={plano} className="w-full" />
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-3 text-sm text-muted-foreground">
             {plano
               ? `Contorno importado (${plano.origen ?? "archivo"}${plano.nombre ? `: ${plano.nombre}` : ""}). `
               : "Contorno según especificación. "}
@@ -100,17 +102,17 @@ export default function AulaPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Lecturas actuales</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Lecturas actuales</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(["temperatura", "humedad", "co2", "pm25", "lux", "ruido", "ocupacion", "puerta"] as const).map(
             (m) => (
-              <div key={m} className="rounded-md bg-muted/50 p-2 text-center">
+              <div key={m} className="rounded-lg bg-muted/50 p-3 text-center">
                 <div className="text-xs text-muted-foreground">
                   {m === "pm25" ? "PM2.5" : m === "co2" ? "CO₂" : m.charAt(0).toUpperCase() + m.slice(1)}
                 </div>
-                <div className="font-mono text-sm font-semibold tabular-nums">
+                <div className="font-mono text-base font-semibold tabular-nums">
                   {formatearValor(m, valores?.[m])}
                 </div>
               </div>
@@ -120,8 +122,10 @@ export default function AulaPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Nodos del aula</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">
+            Nodos del aula <span className="font-normal text-muted-foreground">({nodos.length})</span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -150,8 +154,10 @@ export default function AulaPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Sensores instalados</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">
+            Sensores instalados <span className="font-normal text-muted-foreground">({sensores.length})</span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -187,11 +193,11 @@ export default function AulaPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Componentes</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Componentes</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="grid gap-1 text-sm sm:grid-cols-2">
+          <ul className="grid gap-2 text-base sm:grid-cols-2">
             {aula.componentes.map((c) => (
               <li key={c.id} className="text-muted-foreground">
                 {c.nombre}: <span className="font-mono text-foreground">{c.cantidad}</span>

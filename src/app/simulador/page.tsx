@@ -71,23 +71,25 @@ export default function SimuladorPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <SlidersHorizontalIcon className="size-6 text-primary" aria-hidden />
-        <h1 className="text-xl font-semibold">Simulador</h1>
-        <span className="ml-auto font-mono text-sm tabular-nums text-muted-foreground">
-          Hora simulada: {simNowMs ? horaLarga(simNowMs) : "--:--:--"}
-        </span>
+    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <SlidersHorizontalIcon className="size-7 text-primary" aria-hidden />
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Simulador</h1>
+          <span className="ml-auto font-mono text-base tabular-nums text-muted-foreground">
+            {simNowMs ? horaLarga(simNowMs) : "--:--:--"}
+          </span>
+        </div>
+        <p className="text-base text-muted-foreground">
+          La simulación corre sola al abrir la app (modo automático). Aquí puedes
+          cambiar el escenario de cada aula, acelerar el tiempo o inyectar un
+          evento puntual.
+        </p>
       </div>
-      <p className="text-sm text-muted-foreground">
-        La simulación corre sola al abrir la app (modo automático). Aquí puedes
-        cambiar el escenario de cada aula, acelerar el tiempo o inyectar un
-        evento puntual.
-      </p>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Reloj de simulación</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Reloj de simulación</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Button
@@ -128,8 +130,8 @@ export default function SimuladorPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Escenario por aula</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Escenario por aula</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {CODIGOS_AULA.map((a) => (
@@ -164,8 +166,8 @@ export default function SimuladorPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Inyectar evento</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Inyectar evento</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Select

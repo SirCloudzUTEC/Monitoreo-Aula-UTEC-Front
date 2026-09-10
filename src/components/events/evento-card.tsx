@@ -41,28 +41,28 @@ export function EventoCard({
   return (
     <div
       className={cn(
-        "rounded-lg border p-3",
+        "rounded-xl border p-4",
         escalado && "border-red-600 bg-red-50 dark:bg-red-950/40",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 text-xs font-medium",
+            "rounded-full px-2.5 py-0.5 text-xs font-medium",
             CLASE_SEVERIDAD[evento.severidad],
           )}
         >
           {ETIQUETA_SEVERIDAD[evento.severidad]}
         </span>
-        <span className="font-medium">{cat.nombre}</span>
+        <span className="text-base font-medium">{cat.nombre}</span>
         <Badge variant="outline">{evento.aula}</Badge>
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">
           {fechaHoraDeIso(evento.ts)}
         </span>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">{cat.descripcion}</p>
+      <p className="mt-1.5 text-sm text-muted-foreground">{cat.descripcion}</p>
       {(evento.valor || evento.umbral) && (
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-xs text-muted-foreground">
           {evento.valor && (
             <>
               Valor: <span className="font-mono">{evento.valor}</span>

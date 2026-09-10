@@ -266,16 +266,16 @@ export default function AjustesPage() {
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <div className="flex items-center gap-3">
-        <Settings2Icon className="size-6 text-primary" aria-hidden />
-        <h1 className="text-xl font-semibold">Ajustes</h1>
+        <Settings2Icon className="size-7 text-primary" aria-hidden />
+        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Ajustes</h1>
       </div>
 
       {/* role */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-xl">
             <ShieldCheckIcon className="size-4" aria-hidden /> Rol
           </CardTitle>
         </CardHeader>
@@ -341,8 +341,8 @@ export default function AjustesPage() {
 
       {/* notifications */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-xl">
             <BellIcon className="size-4" aria-hidden /> Notificaciones
           </CardTitle>
         </CardHeader>
@@ -404,8 +404,8 @@ export default function AjustesPage() {
 
       {/* thresholds */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">
             Umbrales de confort y seguridad
           </CardTitle>
         </CardHeader>
@@ -451,8 +451,8 @@ export default function AjustesPage() {
 
       {/* weekly schedule */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-xl">
             <ClockIcon className="size-4" aria-hidden /> Horario semanal
           </CardTitle>
         </CardHeader>
@@ -547,8 +547,8 @@ export default function AjustesPage() {
 
       {/* contacts */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-xl">
             <UsersIcon className="size-4" aria-hidden /> Contactos de
             notificación
           </CardTitle>

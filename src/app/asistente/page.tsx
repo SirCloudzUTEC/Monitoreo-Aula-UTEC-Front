@@ -86,8 +86,8 @@ export default function AsistentePage() {
   return (
     <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-between gap-6 py-4">
       <header className="w-full max-w-2xl text-center">
-        <h1 className="text-xl font-semibold">Asistente del campus</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Asistente del campus</h1>
+        <p className="mt-2 text-base text-muted-foreground">
           Conversa sobre las aulas, alertas y reportes autorizados para tu rol.
         </p>
       </header>
@@ -166,7 +166,7 @@ export default function AsistentePage() {
             rows={2}
             placeholder="Escribe tu mensaje…"
             aria-label="Mensaje para el asistente"
-            className="min-h-16 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="min-h-16 flex-1 resize-none bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
           <Button
             onClick={() => void enviar()}

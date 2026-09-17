@@ -48,3 +48,9 @@ un servidor con esa configuración real.
 5. Cuando se necesite, construir el panel de aprobación de cuentas pendientes (fuera de alcance de esta migración).
 
 Plan completo original (más detalle de arquitectura, ya incorporado a `docs/DECISIONES.md`): `~/.claude/plans/quiero-que-me-des-foamy-whisper.md` (fuera del repo).
+
+## Actualización: correo y contraseña propios de la app (además de Google)
+
+El Workspace de UTEC bloqueó crear un cliente OAuth externo (`Error 403: org_internal`), así que Google dejó de ser viable como único método para probar el login internamente. Se agregó un segundo provider (`Credentials`, id `credenciales`) con correo y contraseña propios de la app — nunca la contraseña institucional real — sobre la misma tabla `usuarios` y el mismo modelo de roles. Detalle completo, incluidas las mitigaciones contra fuerza bruta, enumeración de cuentas, CSRF, inyección SQL y XSS: `docs/DECISIONES.md` §7.
+
+Verificado en vivo contra la base Neon real de este proyecto: `POST /api/auth/registro` crea la cuenta (pendiente salvo `SUPERADMIN_EMAIL`), login con contraseña correcta abre sesión con el rol/estado reales, contraseña incorrecta nunca abre sesión, y el quinto intento fallido bloquea la cuenta 15 minutos incluso si el sexto intento usa la contraseña correcta. `npx tsc --noEmit`, `npx eslint .` y `npm test` (142/142) siguen en verde.

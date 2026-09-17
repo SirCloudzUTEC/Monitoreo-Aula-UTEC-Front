@@ -20,11 +20,16 @@ Abre `http://localhost:3000`. `setup:local` crea `.env.local` únicamente si no 
 
 Si el archivo ya existía, completa `AUTH_SECRET`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `SUPERADMIN_EMAIL` y `DATABASE_URL` según `.env.example`; el script no lo sobrescribe. Cambiar variables requiere reiniciar el servidor.
 
-Para el login real con Google necesitas un cliente OAuth propio (gratis, sin aprobación de TI de UTEC): crea un proyecto en [Google Cloud Console](https://console.cloud.google.com), configura la pantalla de consentimiento como "Externo" y registra la redirect URI `http://localhost:3000/api/auth/callback/google`. Pon tu propio correo `@utec.edu.pe` en `SUPERADMIN_EMAIL` para entrar con rol superadmin.
+Pon tu propio correo `@utec.edu.pe` en `SUPERADMIN_EMAIL` para entrar con rol superadmin, cualquiera sea el método de login que uses.
+
+Google es opcional: si tu Workspace institucional bloquea crear clientes OAuth externos (`Error 403: org_internal`, común en organizaciones administradas), no hace falta — usa **Crear cuenta** en `/acceso` con tu correo `@utec.edu.pe` y una contraseña nueva (nunca tu contraseña institucional real, es un secreto propio de esta app). Si igual quieres configurar Google más adelante: crea un proyecto en [Google Cloud Console](https://console.cloud.google.com), pantalla de consentimiento "Externo" en modo Prueba (sin dominio ni logo, solo agrega tu correo en "Test users"), y registra la redirect URI `http://localhost:3000/api/auth/callback/google`.
 
 ### Login institucional y permisos
 
-El acceso es por cuenta real (Auth.js + Google), restringido a `@utec.edu.pe`; no hay PIN compartido. Sin `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` configurados, `/acceso` muestra "pendiente de configurar" (fail-closed) en vez de un botón roto.
+El acceso es por cuenta real, restringida a `@utec.edu.pe`; no hay PIN compartido. Dos formas de entrar, intercambiables sobre la misma cuenta:
+
+- **Correo y contraseña** (`/acceso/registro` para crear la cuenta): la contraseña es propia de la app (hash scrypt con sal, nunca en texto plano), no la contraseña institucional. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.
+- **Google** (opcional, solo si `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` están configurados). Sin esas variables, `/acceso` simplemente no muestra el botón de Google en vez de uno roto.
 
 - **miembro** (rol por defecto al primer login): lectura, reportar incidente, recibir alertas.
 - **admin_operativo**: además, atender incidentes (acusar recibo).
@@ -94,14 +99,14 @@ En el proyecto Vercel, selecciona Next.js y configura las variables para el ento
 | ------------------------------ | -------------------------------------------------------------------------------------- |
 | `AUTH_SECRET`                  | Secreto aleatorio de Auth.js; solo servidor, estable entre instancias                 |
 | `DATABASE_URL`                 | Conexión Neon/Postgres; sin ella el login falla cerrado (no hay dónde guardar cuentas) |
-| `GOOGLE_OAUTH_CLIENT_ID`       | Cliente OAuth de Google Cloud Console, redirect URI de este entorno                    |
-| `GOOGLE_OAUTH_CLIENT_SECRET`   | Secreto del cliente OAuth; solo servidor                                               |
+| `GOOGLE_OAUTH_CLIENT_ID`       | Opcional. Cliente OAuth de Google Cloud Console, redirect URI de este entorno          |
+| `GOOGLE_OAUTH_CLIENT_SECRET`   | Opcional. Secreto del cliente OAuth; solo servidor                                     |
 | `SUPERADMIN_EMAIL`             | Correo `@utec.edu.pe` que arranca aprobado como superadmin                             |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública, solo si se habilita push                                                |
 | `VAPID_PRIVATE_KEY`            | Clave privada push, solo servidor                                                      |
 | `VAPID_SUBJECT`                | Contacto válido `mailto:...` o `https://...`, necesario para push                      |
 
-Sin `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, `/acceso` muestra "pendiente de configurar" (fail-closed). Sin `DATABASE_URL` o `AUTH_SECRET`, el login también falla cerrado. Para generar `AUTH_SECRET`:
+Sin `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, `/acceso` simplemente no muestra el botón de Google; el login con correo y contraseña sigue funcionando igual. Sin `DATABASE_URL` o `AUTH_SECRET`, el login falla cerrado (ningún método funciona, no hay dónde guardar cuentas ni firmar sesiones). Para generar `AUTH_SECRET`:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"

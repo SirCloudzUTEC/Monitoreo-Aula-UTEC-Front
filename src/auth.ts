@@ -17,6 +17,7 @@ import {
   type EstadoCuenta,
   type Rol,
 } from "@/lib/auth/identity";
+import { autenticarConCredenciales } from "@/lib/auth/credentials";
 
 declare module "next-auth" {
   interface Session {
@@ -74,6 +75,22 @@ const providers: NextAuthConfig["providers"] = [
   Google({
     clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
     clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+  }),
+  Credentials({
+    id: "credenciales",
+    name: "Correo y contraseña",
+    credentials: {
+      email: { label: "Correo", type: "text" },
+      password: { label: "Contraseña", type: "password" },
+    },
+    authorize: async (credentials) => {
+      const cuenta = await autenticarConCredenciales(
+        credentials?.email,
+        credentials?.password,
+      );
+      if (!cuenta) return null;
+      return { id: cuenta.email, email: cuenta.email, name: cuenta.nombre };
+    },
   }),
 ];
 

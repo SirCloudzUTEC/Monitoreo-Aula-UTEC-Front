@@ -43,6 +43,22 @@ Las mutaciones locales (`useApp().autorizar(permiso)`) revalidan la cuenta contr
 
 Fuera de alcance a propósito por ahora: el panel de aprobación de cuentas pendientes (el schema ya soporta `estado`/`aprobado_por`/`auditoria`). Solo `SUPERADMIN_EMAIL` se auto-aprueba; el resto queda `pendiente` hasta aprobarse manualmente en la base de datos o hasta que exista ese panel.
 
+## 7. Correo y contraseña propios de la app, junto a Google
+
+El Workspace de UTEC bloquea crear clientes OAuth externos (`Error 403: org_internal`) para cuentas gestionadas por su organización, lo que hacía inviable depender solo de Google para las pruebas internas. Se agregó un provider `Credentials` (`src/auth.ts`, id `credenciales`) con correo y contraseña **propios de la app**: nunca es la contraseña institucional real de UTEC, solo un secreto nuevo que el usuario crea al registrarse (`/acceso/registro` → `POST /api/auth/registro`) y que solo desbloquea esta app. Ambos providers comparten la misma tabla `usuarios`, el mismo dominio (`esCorreoInstitucional`) y el mismo modelo de roles/estado — da igual con cuál se entró.
+
+Medidas contra los riesgos propios de un login con contraseña:
+
+- **Hash**: `scrypt` (módulo `node:crypto`, sin dependencia externa) con sal aleatoria por cuenta — `src/lib/auth/password.ts`.
+- **Fuerza mínima**: 10+ caracteres, rechaza la contraseña igual al correo y una lista corta de contraseñas obviamente débiles (`fortalezaPassword`).
+- **Fuerza bruta**: bloqueo de la cuenta 15 minutos tras 5 intentos fallidos (`intentos_fallidos`/`bloqueado_hasta` en `usuarios`), reseteado solo en un login correcto.
+- **Enumeración de cuentas**: correo inexistente, cuenta sin contraseña (solo-Google) y contraseña incorrecta hacen una verificación señuelo de duración equivalente (`verificarConSenuelo`) antes de responder, para que el tiempo de respuesta no delate cuál de los tres casos ocurrió. El registro responde el mismo 409 genérico si el correo ya existe, con o sin contraseña.
+- **CSRF**: el login usa el flujo estándar de Auth.js (token de doble envío); `POST /api/auth/registro` exige `sameOrigin()`, igual que el resto de las API de escritura.
+- **Inyección SQL**: toda consulta usa el *tagged template* `sql` de `@neondatabase/serverless`, nunca concatenación de texto.
+- **XSS**: no hay `dangerouslySetInnerHTML` en el proyecto; nombre y correo se muestran siempre como texto JSX, escapado por React.
+
+Verificado en vivo contra Neon: registro crea la cuenta `pendiente`, login con la contraseña correcta abre sesión con el rol/estado reales, la contraseña incorrecta nunca abre sesión, y al quinto intento fallido la cuenta queda bloqueada incluso probando la contraseña correcta.
+
 ## 7. Eventos inyectados se cierran con el acuse
 
 Un evento inyectado desde el simulador (`fuente: inyeccionManual`) no tiene condición

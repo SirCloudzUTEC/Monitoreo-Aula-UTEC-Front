@@ -1,19 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
+/** Test-only bypass (see src/auth.ts): simulates a superadmin login without
+ * going through real Google OAuth. Requires AUTH_TEST_BYPASS_SECRET and
+ * SUPERADMIN_EMAIL set to the same value in the test server's environment. */
+function bypassCredentials() {
+  const secret = process.env.AUTH_TEST_BYPASS_SECRET;
+  const email = process.env.SUPERADMIN_EMAIL;
+  if (!secret || !email)
+    throw new Error(
+      "Define AUTH_TEST_BYPASS_SECRET y SUPERADMIN_EMAIL para las pruebas e2e (ver README).",
+    );
+  return { secret, email };
+}
+
 async function login(page: Page) {
+  const { secret, email } = bypassCredentials();
+  const csrf = await (await page.request.get("/api/auth/csrf")).json();
+  await page.request.post("/api/auth/callback/test-bypass", {
+    form: { csrfToken: csrf.csrfToken, secret, email, callbackUrl: "/" },
+  });
   await page.goto("/ajustes");
-  await page.getByRole("button", { name: "Entrar como administrador" }).click();
-  await page
-    .getByRole("textbox", { name: "PIN de administrador", exact: true })
-    .fill(process.env.UTEC_TEST_PIN || "2026");
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Confirmar", exact: true })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "Volver a visualizador" }),
-  ).toBeVisible();
+  await expect(page.getByText(email, { exact: false })).toBeVisible();
 }
 
 const checkpoint = (page: Page) =>
@@ -147,13 +155,11 @@ test("forged role header is forbidden and authenticated malformed input is rejec
     ).status(),
   ).toBe(403);
   expect((await request.get("/api/serie?aula=NO-EXISTE")).status()).toBe(400);
-  expect(
-    (
-      await request.post("/api/session", {
-        data: { pin: process.env.UTEC_TEST_PIN || "2026" },
-      })
-    ).status(),
-  ).toBe(200);
+  const { secret, email } = bypassCredentials();
+  const csrf = await (await request.get("/api/auth/csrf")).json();
+  await request.post("/api/auth/callback/test-bypass", {
+    form: { csrfToken: csrf.csrfToken, secret, email, callbackUrl: "/" },
+  });
   expect(
     (
       await request.post("/api/umbrales", {

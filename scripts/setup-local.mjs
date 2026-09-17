@@ -7,10 +7,14 @@ if (existsSync(".env.local")) {
   const secret = randomBytes(48).toString("base64url");
   writeFileSync(
     ".env.local",
-    `# Solo desarrollo local. No subir a Git.\nDEMO_ADMIN_PIN=2026\nAUTH_SESSION_SECRET=${secret}\n`,
+    `# Solo desarrollo local. No subir a Git.\nAUTH_SECRET=${secret}\n` +
+      `# Completa estas dos para probar el login real con Google (ver README):\n` +
+      `GOOGLE_OAUTH_CLIENT_ID=\nGOOGLE_OAUTH_CLIENT_SECRET=\n` +
+      `# Tu correo institucional arranca como superadmin:\nSUPERADMIN_EMAIL=\n`,
     { flag: "wx" },
   );
   console.log(
-    "Configuración local creada. PIN de demostración: 2026. No usar ese PIN en un despliegue público.",
+    "Configuración local creada (AUTH_SECRET generado). Completa GOOGLE_OAUTH_CLIENT_ID/SECRET " +
+      "y SUPERADMIN_EMAIL en .env.local para iniciar sesión con tu cuenta UTEC.",
   );
 }

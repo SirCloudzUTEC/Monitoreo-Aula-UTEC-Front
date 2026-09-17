@@ -1,10 +1,12 @@
 "use client";
 
-// F8 — settings: role (PIN), thresholds (validated by the API, criterio 7),
-// weekly schedule, contacts, push notifications and sound. Every change is
-// confirmed and logged with actor "administrador".
+// F8 — settings: account (Auth.js), thresholds (validated by the API,
+// criterio 7), weekly schedule, contacts, push notifications and sound.
+// Every change is confirmed and logged with the signed-in account's email.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
+import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import {
   BellIcon,
@@ -16,15 +18,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -36,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { puede } from "@/lib/auth/identity";
 import { loadLocal, saveLocal } from "@/lib/data/storage";
 import { DIAS_SEMANA } from "@/lib/schedule";
 import {
@@ -137,10 +131,8 @@ export default function AjustesPage() {
     pushSoportado,
     serverPushSnapshot,
   );
-  const rol = useApp((s) => s.rol);
-  const setRol = useApp((s) => s.setRol);
-  const login = useApp((s) => s.login);
-  const authorizeWrite = useApp((s) => s.authorizeWrite);
+  const cuenta = useApp((s) => s.cuenta);
+  const autorizar = useApp((s) => s.autorizar);
   const sonido = useApp((s) => s.sonido);
   const setSonido = useApp((s) => s.setSonido);
   const prefsAulas = useApp((s) => s.prefsAulas);
@@ -151,9 +143,10 @@ export default function AjustesPage() {
   const setHorario = useApp((s) => s.setHorario);
 
   const online = useOnline();
-  const esAdmin = rol === "administrador" && online;
-  const [pin, setPin] = useState("");
-  const [dialogoPin, setDialogoPin] = useState(false);
+  const esAdmin =
+    online && (cuenta ? puede(cuenta, "gestionar_dispositivos") : false);
+  const puedeRecibirAlertas =
+    online && (cuenta ? puede(cuenta, "recibir_alertas") : false);
   const [borrador, setBorrador] = useState<Record<string, string>>({});
   const [horarioBorrador, setHorarioBorrador] = useState<Horario | null>(null);
   const [contactos, setContactos] = useState<Contactos>({
@@ -205,7 +198,7 @@ export default function AjustesPage() {
       );
       return;
     }
-    if (!(await setUmbrales(nuevos, "administrador"))) return;
+    if (!(await setUmbrales(nuevos))) return;
     setBorrador({});
     toast.success("Umbrales guardados y registrados en el log.");
   };
@@ -245,13 +238,13 @@ export default function AjustesPage() {
         }
       }
     }
-    if (!(await setHorario(h, "administrador"))) return;
+    if (!(await setHorario(h))) return;
     setHorarioBorrador(null);
     toast.success("Horario guardado y registrado en el log.");
   };
 
   const guardarContactos = async () => {
-    if (!(await authorizeWrite())) return;
+    if (!(await autorizar("gestionar_dispositivos"))) return;
     saveLocal("contactos", contactos);
     toast.success("Contactos guardados.");
   };
@@ -275,69 +268,47 @@ export default function AjustesPage() {
         <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Ajustes</h1>
       </div>
 
-      {/* role */}
+      {/* account */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-xl">
-            <ShieldCheckIcon className="size-4" aria-hidden /> Rol
+            <ShieldCheckIcon className="size-4" aria-hidden /> Cuenta
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
-          <p className="text-sm">
-            Rol actual: <strong className="capitalize">{rol}</strong>
-          </p>
-          {esAdmin ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRol("visualizador")}
-            >
-              Volver a visualizador
-            </Button>
+          {cuenta ? (
+            <>
+              <p className="text-sm">
+                {cuenta.nombre || cuenta.email} ({cuenta.email}) · rol{" "}
+                <strong className="capitalize">{cuenta.rol}</strong> · estado{" "}
+                <strong className="capitalize">{cuenta.estado}</strong>
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void signOut({ callbackUrl: "/acceso" })}
+              >
+                Cerrar sesión
+              </Button>
+              {cuenta.estado !== "aprobada" && (
+                <p className="w-full text-xs text-muted-foreground">
+                  Tu cuenta está {cuenta.estado}: la administración debe
+                  aprobarla antes de que puedas editar datos.
+                </p>
+              )}
+            </>
           ) : (
-            <Dialog open={dialogoPin} onOpenChange={setDialogoPin}>
-              <DialogTrigger asChild>
-                <Button size="sm">Entrar como administrador</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>PIN de administrador</DialogTitle>
-                  <DialogDescription>
-                    El rol administrador permite editar umbrales, horario y usar
-                    el simulador. (Fase 1: selector simulado con PIN; fase 2:
-                    cuentas reales.)
-                  </DialogDescription>
-                </DialogHeader>
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  placeholder="PIN"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  aria-label="PIN de administrador"
-                />
-                <DialogFooter>
-                  <Button
-                    onClick={async () => {
-                      const error = await login(pin);
-                      if (error) return void toast.error(error);
-                      setDialogoPin(false);
-                      setPin("");
-                      toast.success(
-                        "Rol administrador de demostración activado.",
-                      );
-                    }}
-                  >
-                    Confirmar
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <p className="text-sm text-muted-foreground">
+              No hay una sesión activa.{" "}
+              <Link href="/acceso" className="underline">
+                Inicia sesión con tu cuenta UTEC
+              </Link>
+              .
+            </p>
           )}
           <p className="w-full text-xs text-muted-foreground">
-            El rol visualizador solo lee: la interfaz bloquea la edición y la
-            API rechaza sus escrituras. Este PIN es solo para demostración; no
-            sustituye las cuentas reales. La app no captura imágenes ni audio.
+            Solo un superadmin puede editar umbrales, horario y usar el
+            simulador. La app no captura imágenes ni audio.
           </p>
         </CardContent>
       </Card>
@@ -363,6 +334,7 @@ export default function AjustesPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!esAdmin}
                   onClick={async () => {
                     const err = await probarPush();
                     if (err) toast.error(err);
@@ -387,7 +359,7 @@ export default function AjustesPage() {
               <Button
                 size="sm"
                 onClick={activarPush}
-                disabled={!supportsPush || !esAdmin}
+                disabled={!supportsPush || !puedeRecibirAlertas}
               >
                 Activar notificaciones push
               </Button>
@@ -477,7 +449,7 @@ export default function AjustesPage() {
         <CardContent className="flex flex-col gap-4">
           {!esAdmin && (
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Solo lectura: entra como administrador para editar.
+              Solo lectura: necesitas una cuenta superadmin para editar.
             </p>
           )}
           {GRUPOS_UMBRALES.map((g) => (

@@ -62,6 +62,6 @@ Se usa Chrome del sistema, Node 24 y el build de producción en Windows. Esta co
 
 ## No incluido / límites
 
-No se integra Blender, hardware, MQTT, planos oficiales, distribución push multiusuario, correo, Telegram, cuentas institucionales ni base de datos central. El PIN compartido no sustituye autenticación de producción ni control de intentos. Cuotas de almacenamiento, cierre abrupto y conflictos entre pestañas no tienen garantía de recuperación. La prueba offline es emulación de navegador, no un ensayo físico en todos los dispositivos.
+No se integra Blender, hardware, MQTT, planos oficiales, distribución push multiusuario, correo, Telegram ni base de datos central compartida entre entornos. El login institucional (Auth.js + Google) reemplaza el PIN compartido, pero todavía falta el panel de aprobación de cuentas pendientes y control de intentos en el propio proveedor. Cuotas de almacenamiento, cierre abrupto y conflictos entre pestañas no tienen garantía de recuperación. La prueba offline es emulación de navegador, no un ensayo físico en todos los dispositivos.
 
 La entrega es rama + PR para revisión. No se fusiona `main` ni se publica producción; un preview de Vercel requiere configurar las variables indicadas en el README y una validación posterior en HTTPS.

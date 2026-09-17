@@ -9,11 +9,13 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   BellIcon,
   DoorOpenIcon,
   FileUpIcon,
   HouseIcon,
+  LogOutIcon,
   MonitorIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -25,6 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useOnline } from "@/lib/use-online";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useApp, CODIGOS_AULA } from "@/lib/store";
@@ -81,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const simNowMs = useApp((s) => s.simNowMs);
   const velocidad = useApp((s) => s.velocidad);
   const corriendo = useApp((s) => s.corriendo);
-  const rol = useApp((s) => s.rol);
+  const cuenta = useApp((s) => s.cuenta);
 
   if (pathname.startsWith("/pantalla")) return <>{children}</>;
 
@@ -145,13 +148,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {corriendo ? `×${velocidad}` : "Pausado"}
               </Badge>
             )}
-            <Badge
-              variant="outline"
-              className="hidden capitalize sm:inline-flex"
-              title="Rol activo"
-            >
-              {rol}
-            </Badge>
+            {cuenta ? (
+              <>
+                <Badge
+                  variant="outline"
+                  className="hidden capitalize sm:inline-flex"
+                  title={cuenta.email}
+                >
+                  {cuenta.nombre || cuenta.email}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Cerrar sesión"
+                  onClick={() => void signOut({ callbackUrl: "/acceso" })}
+                >
+                  <LogOutIcon className="size-4" aria-hidden />
+                </Button>
+              </>
+            ) : (
+              <Link
+                href="/acceso"
+                className="hidden text-sm text-muted-foreground underline-offset-4 hover:underline sm:inline"
+              >
+                Iniciar sesión
+              </Link>
+            )}
             <ThemeToggle />
           </div>
         </div>

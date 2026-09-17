@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
-import { isAdministrator, sameOrigin } from "@/lib/auth/session";
+import { auth } from "@/auth";
+import { puede } from "@/lib/auth/identity";
+import { sameOrigin } from "@/lib/auth/session";
 import { isRecord } from "@/lib/validation";
 import {
   safeNotificationPath,
@@ -10,8 +12,13 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  if (!sameOrigin(req) || !isAdministrator(req))
-    return NextResponse.json({ error: "Solo administrador." }, { status: 403 });
+  const session = await auth();
+  if (
+    !sameOrigin(req) ||
+    !session?.cuenta ||
+    !puede(session.cuenta, "gestionar_dispositivos")
+  )
+    return NextResponse.json({ error: "Solo un superadmin." }, { status: 403 });
   const body: unknown = await req.json().catch(() => null);
   if (!isRecord(body) || !validSubscription(body.subscription))
     return NextResponse.json(

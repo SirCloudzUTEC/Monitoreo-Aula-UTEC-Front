@@ -18,7 +18,8 @@
 ┌──────────────▼──────────────── Vercel (serverless) ─────────────────┐
 │  API routes *stateless* (replican el simulador determinista):       │
 │  /api/mediciones /api/serie /api/estado /api/eventos                │
-│  /api/umbrales (POST solo administrador) /api/push/send|subscribe   │
+│  /api/umbrales (POST solo superadmin) /api/push/send|subscribe      │
+│  /api/auth/[...nextauth] (login Auth.js + Google)                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAdministrator, sameOrigin } from "@/lib/auth/session";
+import { auth } from "@/auth";
+import { puede } from "@/lib/auth/identity";
+import { sameOrigin } from "@/lib/auth/session";
 import { validSubscription } from "@/lib/notify/validation";
 
 export async function POST(req: NextRequest) {
-  if (!sameOrigin(req) || !isAdministrator(req))
-    return NextResponse.json({ error: "Solo administrador." }, { status: 403 });
+  const session = await auth();
+  if (
+    !sameOrigin(req) ||
+    !session?.cuenta ||
+    !puede(session.cuenta, "recibir_alertas")
+  )
+    return NextResponse.json(
+      { error: "Inicia sesión con una cuenta aprobada." },
+      { status: 403 },
+    );
   const body: unknown = await req.json().catch(() => null);
   if (!validSubscription(body))
     return NextResponse.json(

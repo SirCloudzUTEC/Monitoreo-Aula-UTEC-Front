@@ -1,13 +1,27 @@
 "use client";
 
 // Client bootstrap: starts the simulation store once, registers the service
-// worker (PWA) and mounts global providers (theme, tooltips, toasts).
+// worker (PWA), syncs the Auth.js session into the store and mounts global
+// providers (theme, tooltips, toasts).
 
 import { useEffect } from "react";
 import { ThemeProvider } from "next-themes";
+import { useSession } from "next-auth/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { useApp } from "@/lib/store";
+import { AppSessionProvider } from "@/components/session-provider";
+
+function SessionSync() {
+  const { data } = useSession();
+  const setCuenta = useApp((s) => s.setCuenta);
+
+  useEffect(() => {
+    setCuenta(data?.cuenta ?? null);
+  }, [data, setCuenta]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const iniciar = useApp((s) => s.iniciar);
@@ -15,7 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     iniciar();
     const refresh = () => {
-      void useApp.getState().refreshSession();
+      void useApp.getState().probarConexion();
     };
     const visible = () => {
       if (document.visibilityState === "visible") refresh();
@@ -24,7 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     window.addEventListener("offline", refresh);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", visible);
-    const sessionTimer = window.setInterval(refresh, 30_000);
+    const connTimer = window.setInterval(refresh, 30_000);
     if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js", { updateViaCache: "none" })
@@ -33,7 +47,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         });
     }
     return () => {
-      window.clearInterval(sessionTimer);
+      window.clearInterval(connTimer);
       window.removeEventListener("online", refresh);
       window.removeEventListener("offline", refresh);
       window.removeEventListener("focus", refresh);
@@ -42,16 +56,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [iniciar]);
 
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <TooltipProvider delayDuration={200}>
-        {children}
-        <Toaster position="top-right" richColors closeButton />
-      </TooltipProvider>
-    </ThemeProvider>
+    <AppSessionProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <TooltipProvider delayDuration={200}>
+          <SessionSync />
+          {children}
+          <Toaster position="top-right" richColors closeButton />
+        </TooltipProvider>
+      </ThemeProvider>
+    </AppSessionProvider>
   );
 }

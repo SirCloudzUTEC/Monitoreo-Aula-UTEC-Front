@@ -57,7 +57,7 @@ function worker() {
 describe("service worker response isolation", () => {
   it("never returns cached HTML for an offline JSON API", async () => {
     const { request } = worker();
-    const response = await request("https://aula.example/api/session");
+    const response = await request("https://aula.example/api/umbrales");
     expect(response?.status).toBe(503);
     expect(response?.headers.get("content-type")).toContain("application/json");
   });
@@ -70,11 +70,11 @@ describe("service worker response isolation", () => {
   it("does not cache an authenticated API response", async () => {
     const { request, fetch, cache } = worker();
     fetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ rol: "administrador" }), {
+      new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json" },
       }),
     );
-    await request("https://aula.example/api/session");
+    await request("https://aula.example/api/umbrales");
     expect(cache.put).not.toHaveBeenCalled();
   });
 });

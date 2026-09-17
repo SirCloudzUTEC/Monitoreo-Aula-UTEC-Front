@@ -15,7 +15,6 @@ import type {
   Evento,
   Horario,
   Magnitud,
-  Rol,
   TipoEvento,
   Umbrales,
   Velocidad,
@@ -78,10 +77,11 @@ interface SessionCheckpoint {
 
 interface AppState {
   inicializado: boolean;
-  rol: Rol;
+  cuenta: CuentaUsuario | null;
+  setCuenta: (cuenta: CuentaUsuario | null) => void;
   connected: boolean;
-  refreshSession: () => Promise<boolean>;
-  authorizeWrite: () => Promise<boolean>;
+  probarConexion: () => Promise<boolean>;
+  autorizar: (permiso: Permiso) => Promise<boolean>;
   sonido: boolean;
   prefsAulas: PrefsAulas;
   umbrales: Umbrales;
@@ -96,8 +96,6 @@ interface AppState {
   log: LogRow[];
 
   iniciar: () => void;
-  setRol: (rol: Rol) => Promise<void>;
-  login: (pin: string) => Promise<string | null>;
   setSonido: (v: boolean) => void;
   setPrefsAulas: (p: PrefsAulas) => void;
   setUmbrales: (u: Umbrales, actor: string) => Promise<boolean>;
@@ -137,7 +135,6 @@ function simNow(velocidad: number): number {
 
 export const useApp = create<AppState>((set, get) => {
   let sessionVersion = 0;
-  let authPending = false;
   const persistSession = () => {
     if (!engine || !get().inicializado) return;
     const state = get();
@@ -181,7 +178,8 @@ export const useApp = create<AppState>((set, get) => {
         const titulo = `${cat.nombre} · ${e.evento.aula}`;
         if (e.evento.severidad === "critico") {
           toast.error(titulo, { description: cat.accion, duration: 10_000 });
-          if (get().rol === "administrador")
+          const cuenta = get().cuenta;
+          if (cuenta && puede(cuenta, "recibir_alertas"))
             void notificarTodos({
               titulo,
               cuerpo: cat.accion,
@@ -261,7 +259,7 @@ export const useApp = create<AppState>((set, get) => {
 
   return {
     inicializado: false,
-    rol: "visualizador",
+    cuenta: null,
     connected: false,
     sonido: false,
     prefsAulas: PREFS_AULAS_DEFAULT,
@@ -283,7 +281,6 @@ export const useApp = create<AppState>((set, get) => {
         umbralesSeed as Umbrales,
       );
       const horario = loadLocal<Horario>("horario", HORARIO_DEFAULT);
-      const rol: Rol = "visualizador";
       const sonido = loadLocal<boolean>("sonido", false);
       const prefsAulas = loadLocal<PrefsAulas>("prefsAulas", PREFS_AULAS_DEFAULT);
       const escenarios = loadLocal<Record<AulaCodigo, Escenario>>(
@@ -313,13 +310,12 @@ export const useApp = create<AppState>((set, get) => {
         inicializado: true,
         umbrales,
         horario,
-        rol,
         sonido,
         prefsAulas,
         escenarios,
         simNowMs: anclaSimMs,
       });
-      void get().refreshSession();
+      void get().probarConexion();
 
       void cargarLogRows().then((rows) => {
         if (rows.length > 0) {
@@ -398,84 +394,56 @@ export const useApp = create<AppState>((set, get) => {
       intervalo = setInterval(tickReal, 1000);
     },
 
-    refreshSession: async () => {
-      if (authPending) return false;
+    setCuenta: (cuenta) => set({ cuenta }),
+
+    // Lightweight reachability heartbeat, independent of authentication:
+    // pings a public endpoint so the sim clock freezes when the server is
+    // unreachable even while navigator.onLine still reports true.
+    probarConexion: async () => {
       const version = ++sessionVersion;
       try {
         if (typeof navigator !== "undefined" && !navigator.onLine)
           throw new Error("offline");
-        const response = await fetch("/api/session", {
+        const response = await fetch("/api/umbrales", {
           cache: "no-store",
-          credentials: "same-origin",
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!response.ok) throw new Error("Server unavailable");
+        if (version !== sessionVersion) return false;
+        set({ connected: true });
+        return true;
+      } catch {
+        if (version === sessionVersion) set({ connected: false });
+        return false;
+      }
+    },
+
+    // Re-fetches the Auth.js session before a write so a stale local
+    // account (e.g. revoked or downgraded elsewhere) can't push a change.
+    autorizar: async (permiso) => {
+      const cuenta = get().cuenta;
+      if (!cuenta || !puede(cuenta, permiso)) return false;
+      try {
+        const response = await fetch("/api/auth/session", {
+          cache: "no-store",
           signal: AbortSignal.timeout(5000),
         });
         if (!response.ok) throw new Error("Session unavailable");
         const body = await response.json();
-        if (body?.rol !== "administrador" && body?.rol !== "visualizador")
-          throw new Error("Invalid session response");
-        if (version !== sessionVersion) return false;
-        set({ rol: body.rol, connected: true });
+        const fresca: CuentaUsuario | null = body?.cuenta ?? null;
+        set({ cuenta: fresca });
+        if (!fresca || !puede(fresca, permiso)) {
+          toast.error(
+            "No se guardó el cambio. Verifica la conexión e inicia sesión nuevamente.",
+          );
+          return false;
+        }
         return true;
       } catch {
-        if (version === sessionVersion)
-          set({ rol: "visualizador", connected: false });
-        return false;
-      }
-    },
-
-    authorizeWrite: async () => {
-      if (get().rol !== "administrador") return false;
-      if (!(await get().refreshSession()) || get().rol !== "administrador") {
         toast.error(
           "No se guardó el cambio. Verifica la conexión e inicia sesión nuevamente.",
         );
         return false;
-      }
-      return true;
-    },
-
-    setRol: async (rol) => {
-      if (rol !== "visualizador") return;
-      const version = ++sessionVersion;
-      authPending = true;
-      set({ rol: "visualizador" });
-      try {
-        const response = await fetch("/api/session", {
-          method: "DELETE",
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!response.ok) throw new Error("Logout failed");
-      } catch {
-        toast.error(
-          "No se pudo cerrar la sesión del servidor. Reconecta y vuelve a intentarlo antes de salir.",
-        );
-      } finally {
-        if (version === sessionVersion) authPending = false;
-      }
-    },
-
-    login: async (pin) => {
-      const version = ++sessionVersion;
-      authPending = true;
-      try {
-        const response = await fetch("/api/session", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          signal: AbortSignal.timeout(5000),
-          body: JSON.stringify({ pin }),
-        });
-        const body = await response.json();
-        if (version !== sessionVersion)
-          return "La sesión cambió; vuelve a intentarlo.";
-        if (!response.ok) return body.error ?? "No se pudo validar el PIN.";
-        set({ rol: "administrador", connected: true });
-        return null;
-      } catch {
-        if (version === sessionVersion)
-          set({ connected: false, rol: "visualizador" });
-        return "Sin conexión: solo lectura. No se pudo validar el PIN.";
-      } finally {
-        if (version === sessionVersion) authPending = false;
       }
     },
 
@@ -502,7 +470,7 @@ export const useApp = create<AppState>((set, get) => {
         fuente: "ajustes",
         valor: "umbrales actualizados",
         umbral: "",
-        actor,
+        actor: get().cuenta?.email ?? "sistema",
         estado_resultante: get().estados["L-419"],
       };
       pendientesGuardar.push(row);
@@ -511,8 +479,8 @@ export const useApp = create<AppState>((set, get) => {
       return true;
     },
 
-    setHorario: async (h, actor) => {
-      if (!(await get().authorizeWrite())) return false;
+    setHorario: async (h) => {
+      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
       saveLocal("horario", h);
       engine?.setHorario(h);
       const row: LogRow = {
@@ -524,7 +492,7 @@ export const useApp = create<AppState>((set, get) => {
         fuente: "ajustes",
         valor: "horario actualizado",
         umbral: "",
-        actor,
+        actor: get().cuenta?.email ?? "sistema",
         estado_resultante: get().estados["L-419"],
       };
       pendientesGuardar.push(row);
@@ -534,7 +502,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setEscenario: async (aula, e) => {
-      if (!(await get().authorizeWrite())) return false;
+      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
       if (
         e === "intruso_ventana" &&
         AULAS.find((item) => item.codigo === aula)!.ventanas === 0
@@ -570,7 +538,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setVelocidad: async (v) => {
-      if (!(await get().authorizeWrite())) return false;
+      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
       // re-anchor so the sim clock is continuous across speed changes
       anclaSimMs = get().corriendo ? simNow(get().velocidad) : get().simNowMs;
       anclaRealMs = Date.now();
@@ -580,7 +548,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setCorriendo: async (v) => {
-      if (!(await get().authorizeWrite())) return false;
+      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
       if (v) {
         anclaSimMs = get().simNowMs || Date.now();
         anclaRealMs = Date.now();
@@ -591,10 +559,9 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     acusar: async (aula, idEvento) => {
-      if (!(await get().authorizeWrite())) return false;
+      if (!(await get().autorizar("atender_incidentes"))) return false;
       if (!engine) return false;
-      const actor =
-        get().rol === "administrador" ? "administrador" : "visualizador";
+      const actor = get().cuenta?.email ?? "sistema";
       const fechaMs = get().simNowMs || Date.now();
       const ev = engine.acusar(aula, idEvento, actor, fechaMs);
       if (!ev) return false;
@@ -630,10 +597,15 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     inyectarEvento: async (aula, tipo) => {
-      if (!(await get().authorizeWrite())) return false;
+      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
       if (!engine) return false;
       const fechaMs = get().simNowMs || Date.now();
-      const emit = engine.inyectar(aula, tipo, fechaMs, "administrador");
+      const emit = engine.inyectar(
+        aula,
+        tipo,
+        fechaMs,
+        get().cuenta?.email ?? "sistema",
+      );
       aplicarEmits([emit], fechaMs);
       set((s) => ({
         abiertos: engine!.eventosAbiertos(),
@@ -647,7 +619,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     agregarLog: async (row) => {
-      if (!(await get().authorizeWrite())) return false;
+      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
       pendientesGuardar.push(row);
       set((s) => ({ log: [...s.log, row] }));
       persistSession();

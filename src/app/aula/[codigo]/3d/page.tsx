@@ -53,7 +53,7 @@ export default function Aula3DPage({
         </Link>
         <h1 className="text-lg font-semibold">Gemelo 3D</h1>
         <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs text-accent-foreground">
-          Nivel 1: estructura y sensores
+          Nivel 2: mobiliario según auditoría
         </span>
         <button
           type="button"

@@ -2,18 +2,55 @@
 
 // F1 — general dashboard: per-classroom summary + the 8 domain modules.
 
+import Link from "next/link";
+import { useState } from "react";
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { AulaSummaryCard } from "@/components/modules/aula-summary-card";
 import { ModuleCard } from "@/components/modules/module-card";
-import { ORDEN_MODULOS } from "@/lib/modules";
+import { ORDEN_MODULOS, riesgoAula } from "@/lib/modules";
 import { useApp, CODIGOS_AULA } from "@/lib/store";
 import { horaLarga } from "@/lib/format";
+import { claseEnCurso } from "@/lib/schedule";
+import type { AulaCodigo } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const MAX_AULAS_VISIBLES = 4;
 
 export default function DashboardPage() {
   const abiertos = useApp((s) => s.abiertos);
   const estados = useApp((s) => s.estados);
   const simNowMs = useApp((s) => s.simNowMs);
+  const valores = useApp((s) => s.valores);
+  const umbrales = useApp((s) => s.umbrales);
+  const horario = useApp((s) => s.horario);
+  const prefsAulas = useApp((s) => s.prefsAulas);
+  const [expandido, setExpandido] = useState(false);
+
   const sinAcuse = abiertos.filter((e) => !e.acuse).length;
   const aulasLibres = CODIGOS_AULA.filter((a) => estados[a] === "Libre").length;
+
+  const fecha = new Date(simNowMs);
+  const riesgos = CODIGOS_AULA.map((a) =>
+    riesgoAula(a, valores[a], umbrales, abiertos, claseEnCurso(horario, a, fecha)),
+  );
+  const enRiesgo = riesgos.filter((r) => r.score > 0).sort((a, b) => b.score - a.score);
+  const hayRiesgo = enRiesgo.length > 0;
+
+    // Selección manual (ajustes): se muestran ÚNICAMENTE esas aulas, sin relleno.
+    const modoManual = prefsAulas.modo === "manual" && prefsAulas.seleccion.length > 0;
+
+    // Sin selección manual: orden por riesgo; si nada está en riesgo, orden normal.
+    const base: AulaCodigo[] = modoManual
+      ? prefsAulas.seleccion.filter((a) => CODIGOS_AULA.includes(a))
+      : hayRiesgo
+        ? [
+            ...enRiesgo.map((r) => r.aula),
+            ...CODIGOS_AULA.filter((a) => !enRiesgo.some((r) => r.aula === a)),
+          ]
+        : CODIGOS_AULA;
+
+    const visibles = modoManual ? base : expandido ? base : base.slice(0, MAX_AULAS_VISIBLES);
+    const restantes = modoManual ? 0 : base.length - visibles.length;
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-8">
@@ -31,11 +68,57 @@ export default function DashboardPage() {
           )}
         </p>
       </div>
-      <section className="grid gap-5 xl:grid-cols-2" aria-label="Resumen por aula">
-        {CODIGOS_AULA.map((a) => (
-          <AulaSummaryCard key={a} aula={a} />
-        ))}
+
+      <section className="flex flex-col gap-4" aria-label="Resumen por aula">
+        <div className="flex items-center justify-between gap-2">
+          {hayRiesgo ? (
+            <h2 className="text-lg font-semibold text-red-600">
+              Aulas en riesgo ({enRiesgo.length})
+            </h2>
+          ) : (
+            <span />
+          )}
+          <Link
+            href="/aulas"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Ver más aulas →
+          </Link>
+        </div>
+        <div className="grid gap-5 xl:grid-cols-2">
+          {visibles.map((a) => (
+            <AulaSummaryCard key={a} aula={a} />
+          ))}
+        </div>
+        {restantes > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpandido(true)}
+            className={cn(
+              "flex items-center justify-center gap-1.5 text-sm font-medium",
+              hayRiesgo
+                ? "text-red-600 hover:text-red-700"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {hayRiesgo
+              ? `Ver ${restantes} aula${restantes === 1 ? "" : "s"} más en riesgo`
+              : `Ver ${restantes} aula${restantes === 1 ? "" : "s"} más`}
+            <ChevronDownIcon className="size-4" aria-hidden />
+          </button>
+        )}
+        {expandido && base.length > MAX_AULAS_VISIBLES && (
+          <button
+            type="button"
+            onClick={() => setExpandido(false)}
+            className="flex items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            Mostrar menos
+            <ChevronUpIcon className="size-4" aria-hidden />
+          </button>
+        )}
       </section>
+
       <section aria-label="Módulos de dominio">
         <h2 className="mb-4 text-lg font-semibold">Módulos de monitoreo</h2>
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">

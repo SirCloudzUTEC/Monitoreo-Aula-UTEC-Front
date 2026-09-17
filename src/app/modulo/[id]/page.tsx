@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { notFound, useParams } from "next/navigation";
+import { notFound, useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SerieChart, lineasUmbral } from "@/components/charts/serie-chart";
@@ -44,6 +44,7 @@ function ChartAula({
 
 export default function ModuloPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const abiertos = useApp((s) => s.abiertos);
   const umbrales = useApp((s) => s.umbrales);
   const [rango, setRango] = useState<RangoId>("1h");
@@ -54,9 +55,15 @@ export default function ModuloPage() {
   const evs = eventosDeModulo(abiertos, modulo);
 
   // classrooms that actually have this module's sensors
-  const aulas = CODIGOS_AULA.filter(
+  const aulasFiltradas = CODIGOS_AULA.filter(
     (a) => modulo !== "perimetro" || getAula(a).ventanas > 0,
   );
+  // si venimos de un click en el panel general, esa aula va primero
+  const aulaDestacada = searchParams.get("aula");
+  const aulas =
+    aulaDestacada && aulasFiltradas.includes(aulaDestacada as AulaCodigo)
+      ? [aulaDestacada as AulaCodigo, ...aulasFiltradas.filter((a) => a !== aulaDestacada)]
+      : aulasFiltradas;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8">

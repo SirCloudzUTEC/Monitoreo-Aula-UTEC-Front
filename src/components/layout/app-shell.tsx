@@ -4,6 +4,8 @@
 // Mobile first: bottom tab bar on small screens, sidebar on md+.
 // The TV view (/pantalla/*) renders without any chrome.
 
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -15,6 +17,8 @@ import {
   HouseIcon,
   LogOutIcon,
   MonitorIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
   ScrollTextIcon,
   Settings2Icon,
   SirenIcon,
@@ -73,6 +77,7 @@ function activo(pathname: string, href: string): boolean {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [sidebarAbierto, setSidebarAbierto] = useState(true);
   const online = useOnline();
   const abiertos = useApp((s) => s.abiertos);
   const estados = useApp((s) => s.estados);
@@ -90,6 +95,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* top bar */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center gap-3 px-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden md:inline-flex"
+            onClick={() => setSidebarAbierto((v) => !v)}
+            aria-pressed={sidebarAbierto}
+            title={sidebarAbierto ? "Ocultar barra lateral" : "Mostrar barra lateral"}
+          >
+            {sidebarAbierto ? (
+              <PanelLeftCloseIcon className="size-5" aria-hidden />
+            ) : (
+              <PanelLeftOpenIcon className="size-5" aria-hidden />
+            )}
+          </Button>
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <Image
               src="/brand/utec-logo.png"
@@ -159,6 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+      <div className="light-line" aria-hidden />
 
       <div
         role="status"
@@ -170,7 +190,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <div className="flex flex-1">
         {/* sidebar (md+) */}
-        <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-56 shrink-0 border-r md:block">
+        <aside
+          className={cn(
+            "sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-56 shrink-0 border-r md:block",
+            !sidebarAbierto && "md:hidden",
+          )}
+        >
           <nav className="flex flex-col gap-1 p-3">
             {NAV.map((item) => (
               <Link
@@ -179,8 +204,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
                   activo(pathname, item.href)
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    ? "bg-primary text-primary-foreground glow-active"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground glow-hover",
                 )}
               >
                 <item.icono className="size-4" aria-hidden />

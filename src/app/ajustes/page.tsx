@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   BellIcon,
   ClockIcon,
+  LayoutDashboardIcon,
   Settings2Icon,
   ShieldCheckIcon,
   UsersIcon,
@@ -134,6 +135,8 @@ export default function AjustesPage() {
   const autorizar = useApp((s) => s.autorizar);
   const sonido = useApp((s) => s.sonido);
   const setSonido = useApp((s) => s.setSonido);
+  const prefsAulas = useApp((s) => s.prefsAulas);
+  const setPrefsAulas = useApp((s) => s.setPrefsAulas);
   const umbrales = useApp((s) => s.umbrales);
   const setUmbrales = useApp((s) => s.setUmbrales);
   const horario = useApp((s) => s.horario);
@@ -371,6 +374,68 @@ export default function AjustesPage() {
             Canales adicionales (correo, Telegram) quedan listos como
             adaptadores para la fase 2.
           </p>
+        </CardContent>
+      </Card>
+
+            {/* dashboard classroom preferences */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <LayoutDashboardIcon className="size-4" aria-hidden /> Panel general
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="modo-aulas">Visualización de aulas</Label>
+            <Select
+              value={prefsAulas.modo}
+              onValueChange={(v) =>
+                setPrefsAulas({ ...prefsAulas, modo: v as "representativas" | "manual" })
+              }
+            >
+              <SelectTrigger id="modo-aulas" className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="representativas">Más representativas (por defecto)</SelectItem>
+                <SelectItem value="manual">Seleccionar aulas</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Elige qué aulas se destacan primero en el panel general (máximo 4). Con "Seleccionar
+              aulas", solo esas aparecerán ahí; el resto queda a un clic en "Ver más aulas".
+            </p>
+          </div>
+          {prefsAulas.modo === "manual" && (
+            <div className="flex flex-col gap-2">
+              {CODIGOS_AULA.map((a) => (
+                <div key={a} className="flex items-center gap-3">
+                  <Switch
+                    id={`aula-pref-${a}`}
+                    checked={prefsAulas.seleccion.includes(a)}
+                    onCheckedChange={(v) => {
+                      if (v && prefsAulas.seleccion.length >= 4) {
+                        toast.error("Como máximo puedes elegir 4 aulas para el panel general.");
+                        return;
+                      }
+                      setPrefsAulas({
+                        ...prefsAulas,
+                        seleccion: v
+                          ? [...prefsAulas.seleccion, a]
+                          : prefsAulas.seleccion.filter((x) => x !== a),
+                      });
+                    }}
+                  />
+                  <Label htmlFor={`aula-pref-${a}`}>{a}</Label>
+                </div>
+              ))}
+              {prefsAulas.seleccion.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Sin aulas seleccionadas: se usará el orden por defecto mientras tanto.
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

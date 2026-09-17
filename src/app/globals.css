@@ -137,3 +137,127 @@
     @apply font-heading tracking-tight text-balance;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * UTEC glow system: animated light lines and active-edge illumination.
+ * Uses the brand cyan (#37bbec) family. Honors prefers-reduced-motion.
+ * ------------------------------------------------------------------------- */
+
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes glow-rotate {
+  to {
+    --glow-angle: 360deg;
+  }
+}
+
+@keyframes glow-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px oklch(0.74 0.13 230 / 25%), 0 0 12px -2px oklch(0.74 0.13 230 / 20%);
+  }
+  50% {
+    box-shadow: 0 0 0 1px oklch(0.74 0.13 230 / 55%), 0 0 22px -2px oklch(0.74 0.13 230 / 45%);
+  }
+}
+
+/* Traveling light that runs around the element's border (Hermes-style). */
+.glow-border {
+  position: relative;
+  isolation: isolate;
+}
+.glow-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--glow-angle),
+    transparent 0%,
+    oklch(0.74 0.13 230 / 85%) 12%,
+    oklch(0.85 0.09 220 / 95%) 18%,
+    oklch(0.74 0.13 230 / 85%) 24%,
+    transparent 36%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: glow-rotate 3.2s linear infinite;
+  pointer-events: none;
+}
+
+/* Static illuminated edge for the ACTIVE section (nav items, cards). */
+.glow-active {
+  box-shadow:
+    0 0 0 1px oklch(0.74 0.13 230 / 45%),
+    0 0 14px -3px oklch(0.74 0.13 230 / 40%),
+    inset 0 0 8px -6px oklch(0.74 0.13 230 / 35%);
+}
+
+/* Soft breathing highlight for status elements. */
+.glow-breathe {
+  animation: glow-breathe 2.8s ease-in-out infinite;
+}
+
+/* Horizontal light line: a moving cyan streak over a faint rail. */
+.light-line {
+  position: relative;
+  height: 1px;
+  background: oklch(0.74 0.13 230 / 15%);
+  overflow: hidden;
+}
+.light-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(0.74 0.13 230 / 90%) 45%,
+    oklch(0.9 0.06 215 / 95%) 50%,
+    oklch(0.74 0.13 230 / 90%) 55%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: glow-sweep 3.6s linear infinite;
+}
+
+/* Subtle hover lift for interactive cards. */
+.glow-hover {
+  transition: box-shadow 0.25s ease;
+}
+.glow-hover:hover {
+  box-shadow:
+    0 0 0 1px oklch(0.74 0.13 230 / 35%),
+    0 0 16px -4px oklch(0.74 0.13 230 / 30%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-border::before,
+  .light-line::after,
+  .glow-breathe {
+    animation: none;
+  }
+  .glow-border::before {
+    background: conic-gradient(
+      from 0deg,
+      oklch(0.74 0.13 230 / 40%),
+      oklch(0.74 0.13 230 / 40%)
+    );
+  }
+}

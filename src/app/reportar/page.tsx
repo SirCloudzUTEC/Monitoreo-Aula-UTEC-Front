@@ -120,7 +120,7 @@ export default function ReportarPage() {
         )}
       </header>
 
-      <div className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="glow-border space-y-4 rounded-xl border bg-card p-4 shadow-sm">
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="categoria">
             ¿Qué ocurrió?

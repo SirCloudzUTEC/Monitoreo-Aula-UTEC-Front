@@ -2,34 +2,34 @@
   {
     "codigo": "L-419",
     "nombre": "Aula L-419",
-    "largo": 10,
-    "ancho": 6,
-    "alto": 3,
+    "largo": 12.5,
+    "ancho": 8.6,
+    "alto": 3.4,
     "aforo": 40,
     "puertas": 1,
     "ventanas": 2,
     "aireAcondicionado": true,
     "nodos": ["nodoAmbiental", "nodoPuerta", "nodoVentana1", "nodoVentana2", "procesadorAula"],
     "posiciones": {
-      "nodoAmbiental": { "x": 5, "y": 3 },
-      "nodoPuerta": { "x": 0.3, "y": 5.2 },
-      "nodoVentana1": { "x": 3, "y": 0.2 },
-      "nodoVentana2": { "x": 7, "y": 0.2 },
-      "procesadorAula": { "x": 9.5, "y": 5.5 },
-      "puerta": { "x": 0, "y": 5 },
-      "ventana1": { "x": 2.5, "y": 0 },
-      "ventana2": { "x": 6.5, "y": 0 },
-      "proyector": { "x": 5, "y": 2 },
-      "pantallaLocal": { "x": 9.7, "y": 5 }
+      "nodoAmbiental": { "x": 6.25, "y": 4.3 },
+      "nodoPuerta": { "x": 0.4, "y": 7.5 },
+      "nodoVentana1": { "x": 3.75, "y": 0.3 },
+      "nodoVentana2": { "x": 8.75, "y": 0.3 },
+      "procesadorAula": { "x": 11.9, "y": 7.9 },
+      "puerta": { "x": 0, "y": 7.2 },
+      "ventana1": { "x": 3.1, "y": 0 },
+      "ventana2": { "x": 8.1, "y": 0 },
+      "proyector": { "x": 6.25, "y": 2.9 },
+      "pantallaLocal": { "x": 12.1, "y": 7.2 }
     },
     "componentes": [
-      { "id": "proyector", "nombre": "Proyector", "cantidad": 1, "pos": { "x": 5, "y": 2 } },
+      { "id": "proyector", "nombre": "Proyector", "cantidad": 1, "pos": { "x": 6.25, "y": 2.9 } },
       { "id": "luminarias", "nombre": "Luminarias LED", "cantidad": 8 },
       { "id": "computadoras", "nombre": "Computadora de docente", "cantidad": 1 },
       { "id": "enchufes", "nombre": "Enchufes dobles", "cantidad": 6 },
-      { "id": "cajaElectrica", "nombre": "Caja eléctrica", "cantidad": 1, "pos": { "x": 9.7, "y": 0.3 } },
+      { "id": "cajaElectrica", "nombre": "Caja eléctrica", "cantidad": 1, "pos": { "x": 12.1, "y": 0.4 } },
       { "id": "mesas", "nombre": "Mesas", "cantidad": 20 },
-      { "id": "pantallaLocal", "nombre": "Pantalla local 24\" (HDMI)", "cantidad": 1, "pos": { "x": 9.7, "y": 5 } }
+      { "id": "pantallaLocal", "nombre": "Pantalla local 24\" (HDMI)", "cantidad": 1, "pos": { "x": 12.1, "y": 7.2 } }
     ]
   },
   {

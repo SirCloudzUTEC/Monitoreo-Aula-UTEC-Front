@@ -9,7 +9,7 @@ import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
 import { getAula } from "@/lib/simulator/profiles";
 import { bloqueEnCurso, minutosRestantes, proximoBloque, DIAS_SEMANA } from "@/lib/schedule";
 import { ETIQUETA_ESTADO, formatearValor, horaCorta } from "@/lib/format";
-import type { AulaCodigo, EstadoAula, Magnitud } from "@/lib/types";
+import type { AulaCodigo, EstadoAula, EstadoPuerta, Magnitud, Umbrales } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const COLOR_ESTADO: Record<EstadoAula, string> = {
@@ -19,13 +19,52 @@ const COLOR_ESTADO: Record<EstadoAula, string> = {
   Alerta: "bg-red-600 text-white",
 };
 
-const METRICAS: { magnitud: Magnitud; etiqueta: string }[] = [
-  { magnitud: "temperatura", etiqueta: "Temperatura" },
-  { magnitud: "humedad", etiqueta: "Humedad" },
-  { magnitud: "co2", etiqueta: "CO₂" },
-  { magnitud: "ruido", etiqueta: "Ruido" },
-  { magnitud: "lux", etiqueta: "Iluminación" },
-  { magnitud: "puerta", etiqueta: "Puerta" },
+interface MetricaConfig {
+  magnitud: Magnitud;
+  etiqueta: string;
+  /** cuándo se pinta en rojo */
+  enAlerta: (valor: number | EstadoPuerta | undefined, umbrales: Umbrales) => boolean;
+  /** texto del botón verde; si no hay, esa medida no se puede "arreglar" desde la pantalla */
+  accion?: string;
+}
+
+const METRICAS: MetricaConfig[] = [
+  {
+    magnitud: "temperatura",
+    etiqueta: "Temperatura",
+    enAlerta: (v, u) => typeof v === "number" && v > u.umbralTemp,
+    accion: "Subir aire acondicionado",
+  },
+  {
+    magnitud: "humedad",
+    etiqueta: "Humedad",
+    enAlerta: (v, u) => typeof v === "number" && (v < u.hrMin || v > u.hrMax),
+    accion: "Ajustar climatización",
+  },
+  {
+    magnitud: "co2",
+    etiqueta: "CO₂",
+    enAlerta: (v, u) => typeof v === "number" && v >= u.co2Aviso,
+    accion: "Aumentar ventilación",
+  },
+  {
+    magnitud: "ruido",
+    etiqueta: "Ruido",
+    enAlerta: (v, u) => typeof v === "number" && v > u.umbralRuido,
+    accion: "Cerrar ventanas",
+  },
+  {
+    magnitud: "lux",
+    etiqueta: "Iluminación",
+    enAlerta: (v, u) => typeof v === "number" && v < u.umbralLux,
+    accion: "Encender luces",
+  },
+  {
+    magnitud: "puerta",
+    etiqueta: "Puerta",
+    enAlerta: (v) => v === "abierta",
+    accion: "Cerrar puerta",
+  },
 ];
 
 export default function PantallaPage() {
@@ -35,6 +74,8 @@ export default function PantallaPage() {
   const estado = useApp((s) => (CODIGOS_AULA.includes(aula) ? s.estados[aula] : "Cerrada"));
   const abiertos = useApp((s) => s.abiertos);
   const horario = useApp((s) => s.horario);
+  const umbrales = useApp((s) => s.umbrales);
+  const corregirAula = useApp((s) => s.corregirAula);
   const simNowMs = useApp((s) => s.simNowMs);
 
   if (!CODIGOS_AULA.includes(aula)) notFound();
@@ -97,29 +138,52 @@ export default function PantallaPage() {
 
       {/* metrics grid */}
       <div className="grid flex-1 grid-cols-2 gap-4 lg:grid-cols-3">
-        <div className="flex flex-col items-center justify-center rounded-xl bg-zinc-900 p-4">
-          <div className="text-[24px] text-zinc-400">Ocupación</div>
-          <div
-            className={cn(
-              "font-mono text-[64px] font-bold tabular-nums leading-tight",
-              ocupacion > spec.aforo && "text-red-500",
-            )}
-          >
+        <div
+          className={cn(
+            "flex flex-col items-center justify-center rounded-xl p-4 transition-colors",
+            ocupacion > spec.aforo ? "bg-red-600/90" : "bg-zinc-900",
+          )}
+        >
+          <div className={cn("text-[24px]", ocupacion > spec.aforo ? "text-red-100" : "text-zinc-400")}>
+            Ocupación
+          </div>
+          <div className="font-mono text-[64px] font-bold tabular-nums leading-tight text-white">
             {ocupacion}
-            <span className="text-[32px] text-zinc-400"> / {spec.aforo}</span>
+            <span className={cn("text-[32px]", ocupacion > spec.aforo ? "text-red-100" : "text-zinc-400")}>
+              {" "}
+              / {spec.aforo}
+            </span>
           </div>
         </div>
-        {METRICAS.map((m) => (
-          <div
-            key={m.magnitud}
-            className="flex flex-col items-center justify-center rounded-xl bg-zinc-900 p-4"
-          >
-            <div className="text-[24px] text-zinc-400">{m.etiqueta}</div>
-            <div className="font-mono text-[48px] font-bold tabular-nums leading-tight">
-              {formatearValor(m.magnitud, valores?.[m.magnitud])}
+        {METRICAS.map((m) => {
+          const valor = valores?.[m.magnitud];
+          const alerta = m.enAlerta(valor, umbrales);
+          return (
+            <div
+              key={m.magnitud}
+              className={cn(
+                "flex flex-col items-center justify-center gap-2 rounded-xl p-4 transition-colors",
+                alerta ? "bg-red-600/90" : "bg-zinc-900",
+              )}
+            >
+              <div className={cn("text-[24px]", alerta ? "text-red-100" : "text-zinc-400")}>
+                {m.etiqueta}
+              </div>
+              <div className="font-mono text-[48px] font-bold tabular-nums leading-tight text-white">
+                {formatearValor(m.magnitud, valor)}
+              </div>
+              {alerta && m.accion && (
+                <button
+                  type="button"
+                  onClick={() => corregirAula(aula)}
+                  className="mt-1 rounded-full border border-white px-4 py-1.5 text-[18px] font-semibold text-white transition-colors hover:bg-white hover:text-black"
+                >
+                  {m.accion}
+                </button>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <footer className="mt-4 text-center text-[18px] text-zinc-500">

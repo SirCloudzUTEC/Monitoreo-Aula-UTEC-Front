@@ -19,7 +19,14 @@ import type {
   Umbrales,
   Velocidad,
 } from "@/lib/types";
-import { puede, type CuentaUsuario, type Permiso } from "@/lib/auth/identity";
+
+export type ModoVisualizacionAulas = "representativas" | "manual";
+export interface PrefsAulas {
+  modo: ModoVisualizacionAulas;
+  seleccion: AulaCodigo[];
+}
+const PREFS_AULAS_DEFAULT: PrefsAulas = { modo: "representativas", seleccion: [] };
+
 import {
   RuleEngine,
   type EngineEmit,
@@ -76,6 +83,7 @@ interface AppState {
   probarConexion: () => Promise<boolean>;
   autorizar: (permiso: Permiso) => Promise<boolean>;
   sonido: boolean;
+  prefsAulas: PrefsAulas;
   umbrales: Umbrales;
   horario: Horario;
   escenarios: Record<AulaCodigo, Escenario>;
@@ -89,9 +97,11 @@ interface AppState {
 
   iniciar: () => void;
   setSonido: (v: boolean) => void;
-  setUmbrales: (u: Umbrales) => Promise<boolean>;
-  setHorario: (h: Horario) => Promise<boolean>;
+  setPrefsAulas: (p: PrefsAulas) => void;
+  setUmbrales: (u: Umbrales, actor: string) => Promise<boolean>;
+  setHorario: (h: Horario, actor: string) => Promise<boolean>;
   setEscenario: (aula: AulaCodigo, e: Escenario) => Promise<boolean>;
+  corregirAula: (aula: AulaCodigo) => void;
   setVelocidad: (v: Velocidad) => Promise<boolean>;
   setCorriendo: (v: boolean) => Promise<boolean>;
   acusar: (aula: AulaCodigo, idEvento: string) => Promise<boolean>;
@@ -252,6 +262,7 @@ export const useApp = create<AppState>((set, get) => {
     cuenta: null,
     connected: false,
     sonido: false,
+    prefsAulas: PREFS_AULAS_DEFAULT,
     umbrales: umbralesSeed as Umbrales,
     horario: HORARIO_DEFAULT,
     escenarios: { "L-419": "clase_normal", "A-1001": "clase_normal" },
@@ -271,6 +282,7 @@ export const useApp = create<AppState>((set, get) => {
       );
       const horario = loadLocal<Horario>("horario", HORARIO_DEFAULT);
       const sonido = loadLocal<boolean>("sonido", false);
+      const prefsAulas = loadLocal<PrefsAulas>("prefsAulas", PREFS_AULAS_DEFAULT);
       const escenarios = loadLocal<Record<AulaCodigo, Escenario>>(
         "escenarios",
         {
@@ -299,6 +311,7 @@ export const useApp = create<AppState>((set, get) => {
         umbrales,
         horario,
         sonido,
+        prefsAulas,
         escenarios,
         simNowMs: anclaSimMs,
       });
@@ -439,8 +452,13 @@ export const useApp = create<AppState>((set, get) => {
       set({ sonido: v });
     },
 
-    setUmbrales: async (u) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
+    setPrefsAulas: (p) => {
+      saveLocal("prefsAulas", p);
+      set({ prefsAulas: p });
+    },
+
+    setUmbrales: async (u, actor) => {
+      if (!(await get().authorizeWrite())) return false;
       saveLocal("umbrales", u);
       engine?.setUmbrales(u);
       const row: LogRow = {
@@ -501,6 +519,22 @@ export const useApp = create<AppState>((set, get) => {
       });
       persistSession();
       return true;
+    },
+
+    // Acción rápida de la pantalla del aula (F3): no exige login, como un
+    // interruptor físico. Vuelve el escenario simulado a la normalidad.
+    corregirAula: (aula) => {
+      scenarioTimeline[aula].push({
+        at: get().simNowMs + TICK_MS,
+        scenario: "clase_normal",
+      });
+      set((s) => {
+        const escenarios = { ...s.escenarios, [aula]: "clase_normal" as Escenario };
+        saveLocal("escenarios", escenarios);
+        return { escenarios };
+      });
+      persistSession();
+      toast.success(`Corrección aplicada en ${aula}.`);
     },
 
     setVelocidad: async (v) => {

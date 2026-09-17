@@ -12,6 +12,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   BellIcon,
+  ClipboardListIcon,
   DoorOpenIcon,
   FileUpIcon,
   HouseIcon,
@@ -47,6 +48,12 @@ const NAV: NavItem[] = [
   { href: "/asistente", etiqueta: "Asistente", icono: SparklesIcon },
   { href: "/reportar", etiqueta: "Reportar", icono: SirenIcon },
   { href: "/alertas", etiqueta: "Alertas", icono: BellIcon, conAlertas: true },
+  {
+    href: "/reportes",
+    etiqueta: "Reportes",
+    icono: ClipboardListIcon,
+    soloDesktop: true,
+  },
   {
     href: "/aula/L-419",
     etiqueta: "Aula L-419",
@@ -216,7 +223,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               </Link>
             ))}
-            <a
+            
               href={`/pantalla/${CODIGOS_AULA[0]}`}
               target="_blank"
               rel="noopener"

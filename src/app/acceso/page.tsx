@@ -10,6 +10,7 @@ import {
   DOMINIO_INSTITUCIONAL,
   proveedorIdentidadConfigurado,
 } from "@/lib/auth/identity";
+import { BotonGoogle } from "@/app/acceso/boton-google";
 
 export const metadata = { title: "Acceso institucional — UTEC" };
 
@@ -35,12 +36,7 @@ export default function AccesoPage() {
       </div>
 
       {configurado ? (
-        <button
-          type="button"
-          className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          Continuar con cuenta UTEC
-        </button>
+        <BotonGoogle />
       ) : (
         <div className="w-full space-y-3">
           <button

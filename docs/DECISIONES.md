@@ -35,13 +35,13 @@ La suscripción push vive en el navegador (service worker). `/api/push/send` rec
 suscripción en el body y envía. Fase 2: persistir suscripciones del equipo de operaciones
 y hacer _fan-out_ en eventos críticos desde el servidor.
 
-## 6. Sesión de demostración validada por servidor (fase 1)
+## 6. Login institucional con Auth.js, sin PIN compartido
 
-Se descarta el PIN incorporado en el bundle y el encabezado `x-rol`. El PIN vive en `DEMO_ADMIN_PIN`; una cookie HMAC firmada con `AUTH_SESSION_SECRET`, HttpOnly, SameSite=Strict y Secure bajo HTTPS autoriza las API. El origen se compara con el Host real porque NextURL normaliza las direcciones loopback; no se confía en forwarded-host.
+Se descartó definitivamente el PIN incorporado en el bundle, el encabezado `x-rol` y el PIN compartido en `DEMO_ADMIN_PIN`/`AUTH_SESSION_SECRET`: un secreto único conocido por todos los administradores es fácil de adivinar, filtrar o pasar de forma informal. En su lugar, `src/auth.ts` usa Auth.js (NextAuth v5) con provider Google, sesión JWT sin adapter de base de datos: los callbacks propios leen/escriben la tabla `usuarios`, reutilizando `esCorreoInstitucional`/`rolInicial`/`estadoInicial`/`puede` de `src/lib/auth/identity.ts`. Solo cuentas `@utec.edu.pe` verificadas pueden iniciar sesión; sin `DATABASE_URL` configurada, el login falla cerrado. El origen se sigue comparando con el Host real en `sameOrigin()` porque NextURL normaliza las direcciones loopback; no se confía en forwarded-host.
 
-Las mutaciones locales consultan `/api/session` antes de escribir. Una respuesta tardía no restaura permisos después del logout. La sesión se revisa también al recuperar foco/conexión y cada 30 segundos. El servidor debe tener el mismo secreto en todas sus instancias; no se generan secretos por petición.
+Las mutaciones locales (`useApp().autorizar(permiso)`) revalidan la cuenta contra `/api/auth/session` antes de escribir, y cada API protegida vuelve a comprobar `puede(cuenta, permiso)` con `await auth()` del lado del servidor: el cliente nunca es la fuente de verdad de sus propios permisos.
 
-No es autorización multiusuario de producción: el almacenamiento local sigue bajo control del navegador, el PIN es compartido y falta control de intentos. Fase 2: cuentas institucionales, persistencia central y autorización de cada recurso.
+Fuera de alcance a propósito por ahora: el panel de aprobación de cuentas pendientes (el schema ya soporta `estado`/`aprobado_por`/`auditoria`). Solo `SUPERADMIN_EMAIL` se auto-aprueba; el resto queda `pendiente` hasta aprobarse manualmente en la base de datos o hasta que exista ese panel.
 
 ## 7. Eventos inyectados se cierran con el acuse
 

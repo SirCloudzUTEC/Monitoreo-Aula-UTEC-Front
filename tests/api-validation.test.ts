@@ -1,13 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { signSession } from "@/lib/auth/session";
-beforeEach(() =>
-  vi.stubEnv(
-    "AUTH_SESSION_SECRET",
-    "test-only-session-secret-with-at-least-32-characters",
-  ),
-);
-afterEach(() => vi.unstubAllEnvs());
+import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import type { CuentaUsuario } from "@/lib/auth/identity";
+import { auth } from "@/auth";
+
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
+const mockAuth = vi.mocked(auth);
+
+const superadmin: CuentaUsuario = {
+  email: "superadmin@utec.edu.pe",
+  nombre: "Superadmin",
+  rol: "superadmin",
+  ambitos: [],
+  estado: "aprobada",
+};
+
 import { GET } from "@/app/api/serie/route";
 
 import { POST } from "@/app/api/umbrales/route";
@@ -15,7 +21,8 @@ import { GET as getEvents } from "@/app/api/eventos/route";
 import seed from "@/data/umbrales.json";
 
 describe("threshold API validation", () => {
-  it("does not trust a forged administrator header", async () => {
+  it("does not trust a forged administrator header without a real session", async () => {
+    mockAuth.mockResolvedValueOnce(null as never);
     const response = await POST(
       new NextRequest("http://localhost/api/umbrales", {
         method: "POST",
@@ -31,12 +38,13 @@ describe("threshold API validation", () => {
   it.each([null, [], "wrong", { ...seed, co2Aviso: 1800, co2Alerta: 1500 }])(
     "rejects malformed or inconsistent threshold bodies",
     async (body) => {
+      mockAuth.mockResolvedValueOnce({ cuenta: superadmin } as never);
       const response = await POST(
         new NextRequest("http://localhost/api/umbrales", {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            cookie: `utec_demo_session=${signSession()}`,
+            origin: "http://localhost",
           },
           body: JSON.stringify(body),
         }),

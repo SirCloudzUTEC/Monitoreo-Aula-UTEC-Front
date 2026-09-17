@@ -37,7 +37,7 @@ test("offline reload keeps cached readings frozen and API responses JSON", async
   // Check actual server reachability, not navigator.onLine (which Chrome can
   // report true after reloading a service-worker page under offline emulation).
   const response = await page.evaluate(async () => {
-    const result = await fetch("/api/session");
+    const result = await fetch("/api/umbrales");
     return {
       status: result.status,
       contentType: result.headers.get("content-type"),

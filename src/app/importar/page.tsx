@@ -26,13 +26,15 @@ import {
 import { descargarArchivo, saveLocal } from "@/lib/data/storage";
 import { getAula } from "@/lib/simulator/profiles";
 import { CODIGOS_AULA, useApp } from "@/lib/store";
+import { puede } from "@/lib/auth/identity";
 import { useOnline } from "@/lib/use-online";
 import type { AulaCodigo } from "@/lib/types";
 
 export default function ImportarPage() {
-  const admin = useApp((s) => s.rol === "administrador");
+  const cuenta = useApp((s) => s.cuenta);
+  const admin = cuenta ? puede(cuenta, "gestionar_dispositivos") : false;
   const online = useOnline();
-  const authorizeWrite = useApp((s) => s.authorizeWrite);
+  const autorizar = useApp((s) => s.autorizar);
   const [aula, setAula] = useState<AulaCodigo>("L-419");
   const [resultado, setResultado] = useState<
     (ResultadoImport & { nombre: string }) | null
@@ -57,7 +59,13 @@ export default function ImportarPage() {
   };
 
   const guardar = async () => {
-    if (!resultado || !admin || !online || !(await authorizeWrite())) return;
+    if (
+      !resultado ||
+      !admin ||
+      !online ||
+      !(await autorizar("gestionar_dispositivos"))
+    )
+      return;
     const plano: PlanoImportado = {
       puntos: resultado.puntos,
       nombre: resultado.nombre,

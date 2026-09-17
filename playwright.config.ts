@@ -3,10 +3,9 @@ import { existsSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 
 if (existsSync(".env.local")) loadEnvFile(".env.local");
-process.env.UTEC_TEST_PIN ??= process.env.DEMO_ADMIN_PIN;
-if (!process.env.UTEC_TEST_PIN)
+if (!process.env.AUTH_TEST_BYPASS_SECRET || !process.env.SUPERADMIN_EMAIL)
   throw new Error(
-    "Configura UTEC_TEST_PIN o ejecuta npm run setup:local para probar la demo local.",
+    "Configura AUTH_TEST_BYPASS_SECRET y SUPERADMIN_EMAIL para probar la demo local (ver README).",
   );
 
 export default defineConfig({

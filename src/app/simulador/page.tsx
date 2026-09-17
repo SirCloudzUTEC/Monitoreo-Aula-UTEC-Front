@@ -1,6 +1,6 @@
 "use client";
 
-// F7 — simulator control (administrator only): scenario per classroom,
+// F7 — simulator control (superadmin only): scenario per classroom,
 // speed 1×/10×/60×, pause/resume and manual event injection.
 
 import Link from "next/link";
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { puede } from "@/lib/auth/identity";
 import { useOnline } from "@/lib/use-online";
 import { CATALOGO_EVENTOS, TIPOS_FUERA_NOMINAL } from "@/lib/events/catalog";
 import { horaLarga } from "@/lib/format";
@@ -37,7 +38,8 @@ const ESCENARIOS: Record<Escenario, string> = {
 };
 
 export default function SimuladorPage() {
-  const rol = useApp((s) => s.rol);
+  const cuenta = useApp((s) => s.cuenta);
+  const puedeGestionar = cuenta ? puede(cuenta, "gestionar_dispositivos") : false;
   const online = useOnline();
   const escenarios = useApp((s) => s.escenarios);
   const setEscenario = useApp((s) => s.setEscenario);
@@ -50,7 +52,7 @@ export default function SimuladorPage() {
   const [aulaIny, setAulaIny] = useState<AulaCodigo>("L-419");
   const [tipoIny, setTipoIny] = useState<TipoEvento>("aforo_excedido");
 
-  if (rol !== "administrador" || !online) {
+  if (!puedeGestionar || !online) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <SlidersHorizontalIcon
@@ -59,8 +61,8 @@ export default function SimuladorPage() {
         />
         <h1 className="text-xl font-semibold">Simulador</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Esta sección es solo para el rol <strong>administrador</strong>.
-          Cambia de rol con el PIN en{" "}
+          Esta sección es solo para cuentas <strong>superadmin</strong>.
+          Revisa tu cuenta en{" "}
           <Link href="/ajustes" className="underline">
             Ajustes
           </Link>

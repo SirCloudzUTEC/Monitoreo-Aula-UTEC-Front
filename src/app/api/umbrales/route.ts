@@ -1,20 +1,27 @@
 // GET /api/umbrales — default comfort parameters (SysML seed values).
-// POST /api/umbrales — validates a threshold update; only the administrator
-// role may write (criterio 7: the API must reject a visualizador).
+// POST /api/umbrales — validates a threshold update; only accounts with
+// gestionar_dispositivos (superadmin) may write.
 
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import umbralesSeed from "@/data/umbrales.json";
 import { validateThresholds } from "@/lib/validation";
-import { isAdministrator, sameOrigin } from "@/lib/auth/session";
+import { puede } from "@/lib/auth/identity";
+import { sameOrigin } from "@/lib/auth/session";
 
 export function GET() {
   return NextResponse.json(umbralesSeed);
 }
 
 export async function POST(req: NextRequest) {
-  if (!sameOrigin(req) || !isAdministrator(req)) {
+  const session = await auth();
+  if (
+    !sameOrigin(req) ||
+    !session?.cuenta ||
+    !puede(session.cuenta, "gestionar_dispositivos")
+  ) {
     return NextResponse.json(
-      { error: "Solo el rol administrador puede modificar umbrales." },
+      { error: "Solo un superadmin puede modificar umbrales." },
       { status: 403 },
     );
   }

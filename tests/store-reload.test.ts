@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { CuentaUsuario } from "@/lib/auth/identity";
+
+const superadmin: CuentaUsuario = {
+  email: "superadmin@utec.edu.pe",
+  nombre: "Superadmin",
+  rol: "superadmin",
+  ambitos: [],
+  estado: "aprobada",
+};
 
 const entries = new Map<string, string>();
-function browser(rol = "visualizador") {
+function browser() {
   vi.stubGlobal("window", {
     localStorage: {
       getItem: (key: string) => entries.get(key) ?? null,
@@ -9,10 +18,7 @@ function browser(rol = "visualizador") {
     },
   });
   vi.stubGlobal("navigator", { onLine: true });
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ rol }) }),
-  );
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
 }
 afterEach(() => {
   vi.useRealTimers();
@@ -43,7 +49,7 @@ describe("browser session restoration", () => {
     );
     const { useApp } = await import("@/lib/store");
     useApp.getState().iniciar();
-    await useApp.getState().refreshSession();
+    await useApp.getState().probarConexion();
     const previous = useApp.getState().simNowMs;
     await vi.advanceTimersByTimeAsync(15_000);
     expect(useApp.getState().simNowMs).toBe(previous);
@@ -52,10 +58,14 @@ describe("browser session restoration", () => {
   it("keeps an acknowledged event and its audit rows across reloads", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-07T09:30:00-05:00"));
-    browser("administrador");
+    browser();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cuenta: superadmin }) }),
+    );
     const { useApp } = await import("@/lib/store");
     useApp.getState().iniciar();
-    await useApp.getState().refreshSession();
+    useApp.getState().setCuenta(superadmin);
     await useApp.getState().inyectarEvento("L-419", "aforo_excedido");
     const event = useApp
       .getState()

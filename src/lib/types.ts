@@ -161,8 +161,6 @@ export interface BloqueHorario {
 
 export type Horario = Record<AulaCodigo, BloqueHorario[]>;
 
-export type Rol = "administrador" | "visualizador";
-
 export type Escenario =
   | "clase_normal"
   | "aula_libre"

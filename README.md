@@ -16,20 +16,23 @@ npm run setup:local
 npm run dev
 ```
 
-Abre `http://localhost:3000`. `setup:local` crea `.env.local` únicamente si no existe, con un secreto aleatorio y un PIN **exclusivo para desarrollo**. Consulta el PIN en ese archivo o en la salida del comando. Nunca subas `.env.local` a Git.
+Abre `http://localhost:3000`. `setup:local` crea `.env.local` únicamente si no existe, con un `AUTH_SECRET` aleatorio. Consulta la salida del comando y completa el resto ahí mismo. Nunca subas `.env.local` a Git.
 
-Si el archivo ya existía, completa `DEMO_ADMIN_PIN` y `AUTH_SESSION_SECRET` según `.env.example`; el script no lo sobrescribe. Cambiar variables requiere reiniciar el servidor.
+Si el archivo ya existía, completa `AUTH_SECRET`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `SUPERADMIN_EMAIL` y `DATABASE_URL` según `.env.example`; el script no lo sobrescribe. Cambiar variables requiere reiniciar el servidor.
 
-### Permisos de demostración
+Para el login real con Google necesitas un cliente OAuth propio (gratis, sin aprobación de TI de UTEC): crea un proyecto en [Google Cloud Console](https://console.cloud.google.com), configura la pantalla de consentimiento como "Externo" y registra la redirect URI `http://localhost:3000/api/auth/callback/google`. Pon tu propio correo `@utec.edu.pe` en `SUPERADMIN_EMAIL` para entrar con rol superadmin.
 
-En **Ajustes → Entrar como administrador**, introduce el PIN configurado en el servidor. La API valida el PIN y emite una cookie firmada, HttpOnly, SameSite=Strict, de ocho horas. El navegador no contiene el secreto ni recupera un rol administrativo desde localStorage.
+### Login institucional y permisos
 
-- Visualizador: lectura, filtros y exportaciones.
-- Administrador: escenarios, inyección/acuse de eventos, umbrales, horario y guardado de plano/contactos.
-- Las escrituras locales revalidan la sesión; las API protegidas no confían en `x-rol`.
-- La sesión se consulta al cargar, al recuperar foco/conexión y cada 30 segundos. Perder la sesión impide la siguiente escritura.
+El acceso es por cuenta real (Auth.js + Google), restringido a `@utec.edu.pe`; no hay PIN compartido. Sin `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` configurados, `/acceso` muestra "pendiente de configurar" (fail-closed) en vez de un botón roto.
 
-**Es una demo con PIN compartido, no autenticación institucional.** No usar para decisiones operativas, acceso físico ni datos privados. Antes de uso real hacen falta cuentas, autorización centralizada, control de intentos y persistencia compartida.
+- **miembro** (rol por defecto al primer login): lectura, reportar incidente, recibir alertas.
+- **admin_operativo**: además, atender incidentes (acusar recibo).
+- **superadmin** (solo la cuenta en `SUPERADMIN_EMAIL`, auto-aprobada): además, editar umbrales/horario, usar el Simulador, guardar plano importado y enviar push de prueba.
+- Toda cuenta nueva que no sea la superadmin queda **pendiente** sin permisos hasta aprobarse manualmente en la base de datos (`usuarios.estado`); el panel de aprobación es una tarea aparte, fuera de esta fase.
+- Las escrituras del cliente revalidan la sesión contra el servidor antes de aplicarse; las API protegidas nunca confían en el estado local.
+
+**No usar para decisiones operativas, acceso físico ni datos privados hasta que UTEC confirme el proveedor de identidad institucional y exista el panel de aprobación de cuentas.**
 
 ## Ejecutar en local
 
@@ -49,7 +52,7 @@ npm run start -- --hostname 127.0.0.1 --port 3101
 npm run test:e2e
 ```
 
-Playwright usa Chrome instalado en local. En CI usa Chromium, instalable con `npx playwright install --with-deps chromium`. Las pruebas toman el PIN de `UTEC_TEST_PIN` o de `DEMO_ADMIN_PIN` en `.env.local`; no uses credenciales de producción en pruebas. `UTEC_BASE_URL` permite elegir otra instancia **de pruebas**, sin apuntar a producción.
+Playwright usa Chrome instalado en local. En CI usa Chromium, instalable con `npx playwright install --with-deps chromium`. Las pruebas de sesión usan `AUTH_TEST_BYPASS_SECRET` (provider Credentials que simula un login de superadmin sin pasar por Google real; solo activo cuando esa variable existe, y nunca en producción). `UTEC_BASE_URL` permite elegir otra instancia **de pruebas**, sin apuntar a producción.
 
 Las trazas y capturas de fallos pueden contener datos de la sesión de prueba: permanecen ignoradas en `test-results/` y no deben publicarse sin revisar.
 
@@ -87,15 +90,18 @@ El repositorio de trabajo es `SirCloudzUTEC/Monitoreo-Aula-UTEC-Front`. Las corr
 
 En el proyecto Vercel, selecciona Next.js y configura las variables para el entorno correspondiente (Preview o Production):
 
-| Variable                       | Requisito                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------ |
-| `DEMO_ADMIN_PIN`               | PIN largo y distinto del de desarrollo; solo servidor                                |
-| `AUTH_SESSION_SECRET`          | Secreto aleatorio de al menos 32 caracteres; solo servidor, estable entre instancias |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública, solo si se habilita push                                              |
-| `VAPID_PRIVATE_KEY`            | Clave privada push, solo servidor                                                    |
-| `VAPID_SUBJECT`                | Contacto válido `mailto:...` o `https://...`, necesario para push                    |
+| Variable                       | Requisito                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------- |
+| `AUTH_SECRET`                  | Secreto aleatorio de Auth.js; solo servidor, estable entre instancias                 |
+| `DATABASE_URL`                 | Conexión Neon/Postgres; sin ella el login falla cerrado (no hay dónde guardar cuentas) |
+| `GOOGLE_OAUTH_CLIENT_ID`       | Cliente OAuth de Google Cloud Console, redirect URI de este entorno                    |
+| `GOOGLE_OAUTH_CLIENT_SECRET`   | Secreto del cliente OAuth; solo servidor                                               |
+| `SUPERADMIN_EMAIL`             | Correo `@utec.edu.pe` que arranca aprobado como superadmin                             |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública, solo si se habilita push                                                |
+| `VAPID_PRIVATE_KEY`            | Clave privada push, solo servidor                                                      |
+| `VAPID_SUBJECT`                | Contacto válido `mailto:...` o `https://...`, necesario para push                      |
 
-Sin las dos primeras variables, la demo permanece en lectura y el login devuelve 503 con un mensaje de configuración. Para generar un secreto de sesión:
+Sin `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, `/acceso` muestra "pendiente de configurar" (fail-closed). Sin `DATABASE_URL` o `AUTH_SECRET`, el login también falla cerrado. Para generar `AUTH_SECRET`:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
@@ -105,7 +111,7 @@ Guárdalo solo en la configuración privada del servidor. No adjuntes la salida 
 
 ### Web Push opcional
 
-Genera claves con `npx web-push generate-vapid-keys`, configura las tres variables VAPID, recompila y prueba con HTTPS (o localhost) y sesión administrativa. En Ajustes, concede permiso y envía una prueba.
+Genera claves con `npx web-push generate-vapid-keys`, configura las tres variables VAPID, recompila y prueba con HTTPS (o localhost) y una cuenta aprobada. En Ajustes, concede permiso y (con cuenta superadmin) envía una prueba.
 
 La suscripción pertenece al navegador que está abierto: **no hay registro central de dispositivos ni alertas programadas en servidor al cerrar la app**. Los errores push no desactivan las alertas in-app. Correo y Telegram son adaptadores pendientes; el escalamiento visual indica contactar al responsable, no que se haya enviado un mensaje.
 
@@ -118,4 +124,4 @@ La suscripción pertenece al navegador que está abierto: **no hay registro cent
 - [Mapeo de requisitos](docs/MAPEO_REQUISITOS.md)
 - [Integración y verificación](docs/INTEGRACION.md)
 
-El simulador no captura imágenes, audio ni identidades. Los actores actuales son roles de demostración, no personas autenticadas.
+El simulador no captura imágenes ni audio. Con sesión activa, los eventos del log quedan atribuidos al correo institucional real de quien los generó.

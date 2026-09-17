@@ -58,7 +58,7 @@ export async function suscribirPush(): Promise<PushSubscription> {
   });
   if (!response.ok)
     throw new Error(
-      "No se pudo registrar el push. Verifica tu sesión de administrador.",
+      "No se pudo registrar el push. Verifica tu sesión.",
     );
   return sub;
 }

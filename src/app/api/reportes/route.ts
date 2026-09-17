@@ -1,23 +1,19 @@
 // GET /api/reportes — database status and total (no report contents:
 // members must not browse other people's reports until real auth exists).
 // POST /api/reportes — validates and stores an incident plus one
-// notification per responsible scope. Reports are attributed to a demo
-// system account until institutional sign-in is active.
+// notification per responsible scope. Attributed to the signed-in user's
+// account when there is a session, otherwise to a shared demo account.
 
 import { NextRequest, NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+import { auth } from "@/auth";
 import { sameOrigin } from "@/lib/auth/session";
+import { db } from "@/lib/data/db";
 import {
   CATALOGO_INCIDENTES,
   validarBorrador,
 } from "@/lib/incidents/catalog";
 
 const EMAIL_SISTEMA = "sistema.demo@utec.edu.pe";
-
-function db() {
-  const url = process.env.DATABASE_URL;
-  return url && url.trim().length > 0 ? neon(url) : null;
-}
 
 export async function GET() {
   const sql = db();
@@ -62,11 +58,21 @@ export async function POST(req: NextRequest) {
 
   const info = CATALOGO_INCIDENTES[r.borrador.categoria];
   try {
-    const [reporter] = await sql`
-      insert into usuarios (email, nombre, estado)
-      values (${EMAIL_SISTEMA}, 'Reportes de demostración (sin sesión)', 'aprobada')
-      on conflict (email) do update set nombre = excluded.nombre
-      returning id`;
+    const session = await auth();
+    let reporter: { id: number } | undefined;
+    if (session?.cuenta) {
+      const rows = await sql`
+        select id from usuarios where email = ${session.cuenta.email}`;
+      reporter = rows[0] as { id: number } | undefined;
+    }
+    if (!reporter) {
+      const rows = await sql`
+        insert into usuarios (email, nombre, estado)
+        values (${EMAIL_SISTEMA}, 'Reportes de demostración (sin sesión)', 'aprobada')
+        on conflict (email) do update set nombre = excluded.nombre
+        returning id`;
+      reporter = rows[0] as { id: number };
+    }
     const [incidente] = await sql`
       insert into incidentes (categoria, prioridad, ubicacion, descripcion, reportado_por)
       values (${r.borrador.categoria}, ${info.prioridad}, ${r.borrador.ubicacion},

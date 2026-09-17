@@ -132,7 +132,7 @@ export default function ModuloPage() {
             <Link href="/ajustes" className="underline">
               Ajustes
             </Link>{" "}
-            (rol administrador).
+            (cuenta superadmin).
           </p>
         </CardContent>
       </Card>

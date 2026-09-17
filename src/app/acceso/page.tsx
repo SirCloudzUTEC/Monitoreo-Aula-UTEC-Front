@@ -1,7 +1,7 @@
 // Institutional sign-in surface. Server component: reads real
-// configuration and reports honestly what is pending. No password form —
-// UTEC accounts authenticate through the institutional provider once
-// IT confirms it (Google or Microsoft); we never collect credentials.
+// configuration and reports honestly what is pending. Primary path is an
+// app-specific email+password account (never the user's real UTEC
+// credential); Google appears too once a client ID/secret is configured.
 
 import Image from "next/image";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import {
   proveedorIdentidadConfigurado,
 } from "@/lib/auth/identity";
 import { BotonGoogle } from "@/app/acceso/boton-google";
+import { FormularioLogin } from "@/app/acceso/formulario-login";
 
 export const metadata = { title: "Acceso institucional — UTEC" };
 
@@ -35,22 +36,16 @@ export default function AccesoPage() {
         </p>
       </div>
 
-      {configurado ? (
-        <BotonGoogle />
-      ) : (
+      <FormularioLogin />
+
+      {configurado && (
         <div className="w-full space-y-3">
-          <button
-            type="button"
-            disabled
-            className="w-full cursor-not-allowed rounded-lg bg-muted px-4 py-3 text-sm font-medium text-muted-foreground"
-          >
-            Continuar con cuenta UTEC
-          </button>
-          <p className="rounded-md border border-amber-300/50 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-200">
-            El inicio de sesión institucional está pendiente de configurar con
-            TI de UTEC. Nunca escribas tu contraseña institucional fuera del
-            portal oficial.
-          </p>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            o
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <BotonGoogle />
         </div>
       )}
 

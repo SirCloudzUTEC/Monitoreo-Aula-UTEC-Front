@@ -14,8 +14,17 @@ create table if not exists usuarios (
     check (estado in ('pendiente', 'aprobada', 'suspendida')),
   creado_en timestamptz not null default now(),
   aprobado_en timestamptz,
-  aprobado_por bigint references usuarios(id)
+  aprobado_por bigint references usuarios(id),
+  -- Local app password (scrypt hash, never the user's real UTEC credential).
+  -- Null for accounts that only ever signed in through an OAuth provider.
+  password_hash text,
+  intentos_fallidos int not null default 0,
+  bloqueado_hasta timestamptz
 );
+
+alter table usuarios add column if not exists password_hash text;
+alter table usuarios add column if not exists intentos_fallidos int not null default 0;
+alter table usuarios add column if not exists bloqueado_hasta timestamptz;
 
 create table if not exists incidentes (
   id bigint generated always as identity primary key,

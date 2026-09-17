@@ -47,15 +47,22 @@ export default function AlertasPage() {
   }, [log, abiertos]);
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <BellRingIcon className="size-6 text-primary" aria-hidden />
-        <h1 className="text-xl font-semibold">Alertas</h1>
-        {escaladas > 0 && (
-          <span className="rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white">
-            {escaladas} escalada{escaladas > 1 ? "s" : ""}
-          </span>
-        )}
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <BellRingIcon className="size-7 text-primary" aria-hidden />
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Alertas</h1>
+          {escaladas > 0 && (
+            <span className="rounded-full bg-red-600 px-3 py-0.5 text-sm font-semibold text-white">
+              {escaladas} escalada{escaladas > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        <p className="text-base text-muted-foreground">
+          {abiertas.length === 0
+            ? "No hay alertas abiertas en ninguna aula."
+            : `${abiertas.length} alerta${abiertas.length === 1 ? "" : "s"} abierta${abiertas.length === 1 ? "" : "s"} en total.`}
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2">

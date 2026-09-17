@@ -102,17 +102,17 @@ export default function ReportarPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
-        <h1 className="flex items-center gap-2 text-xl font-semibold">
-          <SirenIcon className="size-5 text-primary" aria-hidden />
+        <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight md:text-4xl">
+          <SirenIcon className="size-8 text-primary" aria-hidden />
           Reportar un incidente
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-2 text-base text-muted-foreground">
           Tu reporte llega al personal correspondiente según la categoría.
           En emergencias graves llama primero a Seguridad UTEC o al 105/106.
         </p>
         {bd && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <DatabaseIcon className="size-3.5" aria-hidden />
+          <p className="mt-3 flex items-center gap-1.5 text-sm text-muted-foreground">
+            <DatabaseIcon className="size-4" aria-hidden />
             {bd.configurada
               ? `Base de datos conectada · ${bd.total} reporte${bd.total === 1 ? "" : "s"} registrado${bd.total === 1 ? "" : "s"}`
               : "Base de datos pendiente de configurar en este entorno"}

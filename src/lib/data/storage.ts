@@ -24,6 +24,17 @@ export function saveLocal<T>(key: string, value: T): void {
   }
 }
 
+/** Triggers a browser download of in-memory text content (CSV, JSON, templates…). */
+export function descargarArchivo(nombre: string, contenido: string, tipo: string): void {
+  const blob = new Blob([contenido], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ---------------------------------------------------------------------------
 // IndexedDB: event log history (survives reloads, 90-day retention applied on load)
 

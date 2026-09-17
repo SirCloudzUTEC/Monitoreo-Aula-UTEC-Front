@@ -27,8 +27,8 @@ export default function AccesoPage() {
           priority
           className="h-12 w-auto dark:brightness-0 dark:invert"
         />
-        <h1 className="text-2xl font-semibold">Campus Digital</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-3xl font-bold tracking-tight">Campus Digital</h1>
+        <p className="text-base text-muted-foreground">
           Plataforma exclusiva para la comunidad UTEC. Solo cuentas
           institucionales <strong>@{DOMINIO_INSTITUCIONAL}</strong>.
         </p>

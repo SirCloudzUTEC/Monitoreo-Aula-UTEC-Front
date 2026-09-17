@@ -34,6 +34,7 @@ import {
   RETENCION_DIAS,
   type LogRow,
 } from "@/lib/events/log";
+import { descargarArchivo } from "@/lib/data/storage";
 import { fechaHoraDeIso } from "@/lib/format";
 import type { AulaCodigo, Severidad } from "@/lib/types";
 
@@ -112,23 +113,19 @@ export default function LogPage() {
     // export what is filtered (order: chronological, as stored)
     const rows = filtrarLog(log, { aula, severidad: sev, texto: texto || undefined });
     const csv = exportarCsv(rows);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = nombreArchivoCsv(aula);
-    a.click();
-    URL.revokeObjectURL(url);
+    descargarArchivo(nombreArchivoCsv(aula), csv, "text/csv;charset=utf-8");
   };
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <ScrollTextIcon className="size-6 text-primary" aria-hidden />
-        <h1 className="text-xl font-semibold">Log de eventos</h1>
-        <span className="ml-auto text-xs text-muted-foreground">
-          Retención: {RETENCION_DIAS} días · {log.length} filas
-        </span>
+    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-3">
+          <ScrollTextIcon className="size-7 text-primary" aria-hidden />
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Log de eventos</h1>
+        </div>
+        <p className="text-base text-muted-foreground">
+          {filtradas.length} de {log.length} filas visibles · retención de {RETENCION_DIAS} días
+        </p>
       </div>
 
       <Tabs defaultValue="log">

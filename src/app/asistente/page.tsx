@@ -93,7 +93,9 @@ export default function AsistentePage() {
       </header>
 
       <div className="flex flex-col items-center gap-4">
-        <ParticleOrb state={estado} size={300} />
+        <div className="glow-breathe rounded-full">
+          <ParticleOrb state={estado} size={300} />
+        </div>
         <p
           className="text-sm capitalize text-muted-foreground"
           role="status"
@@ -117,7 +119,7 @@ export default function AsistentePage() {
           </ul>
         )}
 
-        <div className="flex items-end gap-2 rounded-xl border bg-card p-3 shadow-sm">
+        <div className="glow-border flex items-end gap-2 rounded-xl border bg-card p-3 shadow-sm">
           <div className="flex flex-col gap-2">
             <Select value={proveedor} onValueChange={setProveedor}>
               <SelectTrigger

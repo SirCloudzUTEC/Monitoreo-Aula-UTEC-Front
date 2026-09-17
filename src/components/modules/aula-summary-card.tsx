@@ -27,7 +27,7 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
   const ocupacion = typeof valores.ocupacion === "number" ? valores.ocupacion : 0;
 
   return (
-    <Card>
+    <Card className="glow-hover">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Link href={`/aula/${aula}`} className="hover:underline">

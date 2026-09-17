@@ -56,10 +56,16 @@ export default function AulaPage() {
           {ETIQUETA_ESTADO[estado]}
         </span>
         <a
+          href={`/aula/${codigo}/3d`}
+          className="ml-auto rounded-md bg-primary px-2.5 py-1 text-sm font-medium text-primary-foreground hover:opacity-90"
+        >
+          Vista 3D
+        </a>
+        <a
           href={`/pantalla/${codigo}`}
           target="_blank"
           rel="noopener"
-          className="ml-auto text-sm text-muted-foreground underline hover:text-foreground"
+          className="text-sm text-muted-foreground underline hover:text-foreground"
         >
           Ver pantalla TV ↗
         </a>

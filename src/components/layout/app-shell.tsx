@@ -137,6 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+      <div className="light-line" aria-hidden />
 
       <div
         role="status"
@@ -157,8 +158,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
                   activo(pathname, item.href)
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    ? "bg-primary text-primary-foreground glow-active"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground glow-hover",
                 )}
               >
                 <item.icono className="size-4" aria-hidden />

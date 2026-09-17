@@ -74,7 +74,7 @@ export function ModuleCard({ modulo }: { modulo: ModuloId }) {
 
   return (
     <Link href={`/modulo/${modulo}`} className="block">
-      <Card className="h-full transition-shadow hover:shadow-md">
+      <Card className="glow-hover h-full transition-shadow hover:shadow-md">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <ModuleIcon modulo={modulo} className="size-4 text-muted-foreground" />

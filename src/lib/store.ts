@@ -19,6 +19,7 @@ import type {
   Umbrales,
   Velocidad,
 } from "@/lib/types";
+import { puede, type CuentaUsuario, type Permiso } from "@/lib/auth/identity";
 
 export type ModoVisualizacionAulas = "representativas" | "manual";
 export interface PrefsAulas {
@@ -54,9 +55,6 @@ import umbralesSeed from "@/data/umbrales.json";
 
 export const AULAS = aulasSeed as Aula[];
 export const CODIGOS_AULA = AULAS.map((a) => a.codigo);
-
-/** Admin PIN for the simulated role selector (phase 1; real auth hook in phase 2). */
-// Demo PIN is validated server-side; never ship it in the client bundle.
 
 const WARMUP_MIN = 30; // simulate the last 30 min on load so the app never opens empty
 const MAX_BUCKETS_POR_TICK = 1000; // safety valve at 60x
@@ -98,8 +96,8 @@ interface AppState {
   iniciar: () => void;
   setSonido: (v: boolean) => void;
   setPrefsAulas: (p: PrefsAulas) => void;
-  setUmbrales: (u: Umbrales, actor: string) => Promise<boolean>;
-  setHorario: (h: Horario, actor: string) => Promise<boolean>;
+  setUmbrales: (u: Umbrales) => Promise<boolean>;
+  setHorario: (h: Horario) => Promise<boolean>;
   setEscenario: (aula: AulaCodigo, e: Escenario) => Promise<boolean>;
   corregirAula: (aula: AulaCodigo) => void;
   setVelocidad: (v: Velocidad) => Promise<boolean>;
@@ -457,8 +455,8 @@ export const useApp = create<AppState>((set, get) => {
       set({ prefsAulas: p });
     },
 
-    setUmbrales: async (u, actor) => {
-      if (!(await get().authorizeWrite())) return false;
+    setUmbrales: async (u) => {
+      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
       saveLocal("umbrales", u);
       engine?.setUmbrales(u);
       const row: LogRow = {

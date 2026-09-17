@@ -402,8 +402,8 @@ export default function AjustesPage() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Elige qué aulas se destacan primero en el panel general (máximo 4). Con "Seleccionar
-              aulas", solo esas aparecerán ahí; el resto queda a un clic en "Ver más aulas".
+              Elige qué aulas se destacan primero en el panel general (máximo 4). Con &ldquo;Seleccionar
+              aulas&rdquo;, solo esas aparecerán ahí; el resto queda a un clic en &ldquo;Ver más aulas&rdquo;.
             </p>
           </div>
           {prefsAulas.modo === "manual" && (

@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useOnline } from "@/lib/use-online";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useApp, CODIGOS_AULA } from "@/lib/store";

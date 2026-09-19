@@ -3,12 +3,15 @@
 // Dashboard card for one domain module (F1): per-classroom current value,
 // 60-minute sparkline, traffic light and open-alert count. Links to /modulo/[id].
 
+import { memo } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkline } from "@/components/charts/sparkline";
 import { ModuleIcon } from "@/components/modules/module-icon";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SIN_SERIE, useSerie } from "@/lib/use-serie";
+import { useVisible } from "@/lib/use-visible";
 import { CODIGOS_AULA } from "@/lib/aulas";
 import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
 import {
@@ -25,6 +28,12 @@ import { claseEnCurso } from "@/lib/schedule";
 import type { AulaCodigo, ModuloId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+// recharts is heavy and only draws tiny trend lines here: load it after the first paint
+const Sparkline = dynamic(() => import("@/components/charts/sparkline").then((m) => m.Sparkline), {
+  ssr: false,
+  loading: () => <Skeleton className="h-9 w-full" />,
+});
+
 function FilaAula({
   aula,
   modulo,
@@ -35,19 +44,25 @@ function FilaAula({
   semaforo: Semaforo;
 }) {
   const info = MODULOS[modulo];
-  const { valores } = useEstados();
+  const { valores, antiguedadMs } = useEstados();
+  const cargado = antiguedadMs[aula] !== null;
   const valor = valores[aula][info.principal];
-  const serie = useSerie(aula, info.principal, 60, 1);
+  // the series request waits until the row is on screen
+  const [ref, visible] = useVisible<HTMLDivElement>();
+  const serie = useSerie(aula, info.principal, 60, 1, visible);
   return (
-    <div className="flex items-center gap-3">
+    <div ref={ref} className="flex items-center gap-3">
       <span
-        className={cn("size-3 shrink-0 rounded-full", CLASE_SEMAFORO[semaforo])}
-        title={ETIQUETA_SEMAFORO[semaforo]}
-        aria-label={`${aula}: ${ETIQUETA_SEMAFORO[semaforo]}`}
+        className={cn(
+          "size-3 shrink-0 rounded-full",
+          cargado ? CLASE_SEMAFORO[semaforo] : "animate-pulse bg-muted",
+        )}
+        title={cargado ? ETIQUETA_SEMAFORO[semaforo] : "Cargando"}
+        aria-label={`${aula}: ${cargado ? ETIQUETA_SEMAFORO[semaforo] : "cargando"}`}
       />
       <div className="w-16 shrink-0 text-sm text-muted-foreground">{aula}</div>
       <div className="w-24 shrink-0 font-mono text-base font-semibold tabular-nums">
-        {formatearValor(info.principal, valor)}
+        {cargado ? formatearValor(info.principal, valor) : <Skeleton className="h-5 w-16" />}
       </div>
       <div className="min-w-0 flex-1">
         {SIN_SERIE.includes(info.principal) ? (
@@ -60,10 +75,12 @@ function FilaAula({
   );
 }
 
-export function ModuleCard({ modulo }: { modulo: ModuloId }) {
+export const ModuleCard = memo(function ModuleCard({ modulo }: { modulo: ModuloId }) {
   const info = MODULOS[modulo];
   const { abiertos } = useEventosAbiertos();
-  const { valores, nowMs: simNowMs } = useEstados();
+  const { valores, antiguedadMs, nowMs: simNowMs } = useEstados();
+  // don't claim "within range" for a room whose data has not arrived yet
+  const cargado = CODIGOS_AULA.every((a) => antiguedadMs[a] !== null);
   const { umbrales } = useUmbrales();
   const { horario } = useHorario();
 
@@ -85,8 +102,11 @@ export function ModuleCard({ modulo }: { modulo: ModuloId }) {
             <ModuleIcon modulo={modulo} className="size-5 text-muted-foreground" />
             {info.titulo}
             <span
-              className={cn("ml-auto size-3 rounded-full", CLASE_SEMAFORO[agregado])}
-              title={ETIQUETA_SEMAFORO[agregado]}
+              className={cn(
+                "ml-auto size-3 rounded-full",
+                cargado ? CLASE_SEMAFORO[agregado] : "animate-pulse bg-muted",
+              )}
+              title={cargado ? ETIQUETA_SEMAFORO[agregado] : "Cargando"}
             />
             {nAlertas > 0 && (
               <Badge variant="destructive" className="tabular-nums">
@@ -95,9 +115,11 @@ export function ModuleCard({ modulo }: { modulo: ModuloId }) {
             )}
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            {agregado === "verde"
-              ? "Dentro de rango en ambas aulas"
-              : `Estado: ${ETIQUETA_SEMAFORO[agregado].toLowerCase()}`}
+            {!cargado
+              ? "Cargando estado…"
+              : agregado === "verde"
+                ? "Dentro de rango en ambas aulas"
+                : `Estado: ${ETIQUETA_SEMAFORO[agregado].toLowerCase()}`}
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -108,4 +130,4 @@ export function ModuleCard({ modulo }: { modulo: ModuloId }) {
       </Card>
     </Link>
   );
-}
+});

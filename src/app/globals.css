@@ -155,12 +155,12 @@
   }
 }
 
-@keyframes glow-sweep {
-  0% {
-    background-position: -200% 0;
+@keyframes light-sweep {
+  from {
+    transform: translateX(-100%);
   }
-  100% {
-    background-position: 200% 0;
+  to {
+    transform: translateX(200%);
   }
 }
 
@@ -224,7 +224,11 @@
 .light-line::after {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  will-change: transform;
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -233,8 +237,8 @@
     oklch(0.74 0.13 230 / 90%) 55%,
     transparent 100%
   );
-  background-size: 200% 100%;
-  animation: glow-sweep 3.6s linear infinite;
+  /* transform-only animation: runs on the compositor instead of repainting every frame */
+  animation: light-sweep 3.6s linear infinite;
 }
 
 /* Subtle hover lift for interactive cards. */

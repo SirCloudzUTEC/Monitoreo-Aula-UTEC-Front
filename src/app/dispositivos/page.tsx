@@ -13,6 +13,7 @@ import { CpuIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { FilasSkeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -217,7 +218,7 @@ export default function DispositivosPage() {
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {lista.isPending ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <FilasSkeleton filas={4} columnas={5} />
           ) : dispositivos.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay dispositivos.</p>
           ) : (

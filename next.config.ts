@@ -34,6 +34,10 @@ function politicaCsp(): string {
 }
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // barrel packages: keep only the imported members in the client bundles
+    optimizePackageImports: ["recharts", "radix-ui", "lucide-react"],
+  },
   async headers() {
     return [
       {

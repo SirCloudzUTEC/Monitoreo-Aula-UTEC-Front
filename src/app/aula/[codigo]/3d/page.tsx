@@ -29,7 +29,7 @@ import {
   NODO_META,
   buildLayout,
   type Capas,
-} from "@/components/three/classroom-scene";
+} from "@/components/three/classroom-layout";
 import { cn } from "@/lib/utils";
 
 const ClassroomScene = dynamic(

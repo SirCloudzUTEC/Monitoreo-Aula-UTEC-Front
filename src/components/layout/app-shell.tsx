@@ -4,7 +4,7 @@
 // Mobile first: bottom tab bar on small screens, sidebar on md+.
 // The TV view (/pantalla/*) renders without any chrome.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
@@ -31,11 +31,12 @@ import { Badge } from "@/components/ui/badge";
 import { useOnline } from "@/lib/use-online";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { AvisoErrores } from "@/components/layout/aviso-errores";
+import { RelojLima } from "@/components/layout/reloj-lima";
 import { useApp } from "@/lib/store";
 import { CODIGOS_AULA } from "@/lib/aulas";
 import { useCerrarSesion, useEstados, useEventosAbiertos } from "@/lib/api/hooks";
 import { puede, type Permiso } from "@/lib/auth/identity";
-import { horaLarga, ETIQUETA_ESTADO, CLASE_ESTADO } from "@/lib/format";
+import { ETIQUETA_ESTADO, CLASE_ESTADO } from "@/lib/format";
 
 interface NavItem {
   href: string;
@@ -105,17 +106,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarAbierto, setSidebarAbierto] = useState(true);
   const online = useOnline();
   const { abiertos } = useEventosAbiertos();
-  const { estados } = useEstados();
+  const { estados, antiguedadMs } = useEstados();
   const cuenta = useApp((s) => s.cuenta);
   const cerrarSesion = useCerrarSesion();
-  // wall clock in Lima time, ticking locally (readings arrive every 5 s)
-  const [ahoraMs, setAhoraMs] = useState(0);
-  useEffect(() => {
-    const tick = () => setAhoraMs(Date.now());
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, []);
 
   if (pathname.startsWith("/pantalla") || pathname === "/acceso") return <>{children}</>;
 
@@ -163,20 +156,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={`/aula/${a}`}
                 className={cn(
                   "hidden rounded-full px-2.5 py-0.5 text-xs font-medium md:inline-block",
-                  CLASE_ESTADO[estados[a]],
+                  antiguedadMs[a] === null ? "bg-muted text-muted-foreground" : CLASE_ESTADO[estados[a]],
                 )}
                 title={`Estado de ${a}`}
               >
-                {a}: {ETIQUETA_ESTADO[estados[a]]}
+                {a}: {antiguedadMs[a] === null ? "…" : ETIQUETA_ESTADO[estados[a]]}
               </Link>
             ))}
-            <Badge
-              variant="outline"
-              className="font-mono tabular-nums"
-              title="Hora de Lima"
-            >
-              {ahoraMs ? horaLarga(ahoraMs) : "--:--:--"}
-            </Badge>
+            <RelojLima />
             {cuenta ? (
               <>
                 <Badge

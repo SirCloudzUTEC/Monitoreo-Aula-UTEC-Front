@@ -19,7 +19,9 @@ import {
   estadoAula,
   guardarHorarioAula,
   guardarUmbrales,
+  listarDispositivos,
   listarEventos,
+  listarIncidentes,
   logout,
   obtenerHorario,
   obtenerUmbrales,
@@ -46,6 +48,8 @@ import umbralesSeed from "@/data/umbrales.json";
 export const INTERVALO_ESTADO_MS = 5_000;
 /** Alert list: less latency-sensitive than live readings. */
 export const INTERVALO_EVENTOS_MS = 15_000;
+/** Critical alerts are the ones an admin must not learn about late: poll them as fast as readings. */
+export const INTERVALO_CRITICOS_MS = INTERVALO_ESTADO_MS;
 const INTERVALO_LOG_MS = 30_000;
 
 type Valores = Partial<Record<Magnitud, number | EstadoPuerta>>;
@@ -122,10 +126,15 @@ export function useEstados(): EstadosVivos {
  * Open alerts (severity alerta/critico). `info` rows (ingreso, inicio_clase…)
  * are never "open" in the UI, so they are not requested at all.
  */
-function combinarAbiertos(results: { data?: { content: Evento[] } }[]) {
+function combinarAbiertos(
+  results: { data?: { content: Evento[] }; isError: boolean; refetch: () => unknown }[],
+) {
   return {
     abiertos: results.flatMap((r) => r.data?.content ?? []).filter((e) => !e.cerrado),
     listo: results.every((r) => r.data),
+    /** a request failed and has no data yet: "no alerts" must not be claimed */
+    error: results.some((r) => r.isError && !r.data),
+    reintentar: () => results.forEach((r) => void r.refetch()),
   };
 }
 
@@ -136,7 +145,7 @@ export function useEventosAbiertos() {
       queryKey: ["eventos", "abiertos", severidad],
       queryFn: () => listarEventos({ abierto: true, severidad, size: 200 }),
       enabled: habilitado,
-      refetchInterval: INTERVALO_EVENTOS_MS,
+      refetchInterval: severidad === "critico" ? INTERVALO_CRITICOS_MS : INTERVALO_EVENTOS_MS,
     })),
     combine: combinarAbiertos,
   });
@@ -202,6 +211,33 @@ export function useAcusar() {
       void qc.invalidateQueries({ queryKey: ["estado"] });
     },
     onError: (e) => toast.error(mensajeDeError(e, "No se pudo registrar el acuse.")),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// admin summary (dashboard "Salud operativa"): counts only, so the same cache keys as the full
+// pages are reused where possible and a mutation there refreshes the dashboard too.
+
+/** Incidents waiting for someone to take them (`abierto`); needs `atender_incidentes`. */
+export function useIncidentesSinAtender() {
+  const habilitado = useHabilitado("atender_incidentes");
+  return useQuery({
+    queryKey: ["incidentes", "resumen", "abierto"],
+    queryFn: () => listarIncidentes({ estado: "abierto", size: 1 }),
+    enabled: habilitado,
+    refetchInterval: INTERVALO_LOG_MS,
+    select: (p) => p.totalElements,
+  });
+}
+
+/** Registered MQTT nodes (same cache as /dispositivos); needs `gestionar_dispositivos`. */
+export function useDispositivos() {
+  const habilitado = useHabilitado("gestionar_dispositivos");
+  return useQuery({
+    queryKey: ["dispositivos"],
+    queryFn: listarDispositivos,
+    enabled: habilitado,
+    refetchInterval: INTERVALO_LOG_MS,
   });
 }
 

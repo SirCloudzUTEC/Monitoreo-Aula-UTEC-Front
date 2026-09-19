@@ -14,7 +14,7 @@ import type { Evento, Severidad } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useOnline } from "@/lib/use-online";
 
-const CLASE_SEVERIDAD: Record<Severidad, string> = {
+export const CLASE_SEVERIDAD: Record<Severidad, string> = {
   info: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
   alerta: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   critico: "bg-red-600 text-white",

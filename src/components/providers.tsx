@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AlertasEnVivo } from "@/components/alertas-en-vivo";
+import { PantallaCarga } from "@/components/layout/pantalla-carga";
 import { ApiError, onSesionPerdida } from "@/lib/api/client";
 import { restaurarSesion } from "@/lib/api/session";
 import { useApp } from "@/lib/store";
@@ -67,14 +68,18 @@ function SesionGate({
   }, [sesionLista, cuenta, publica, pathname, router]);
 
   if (!sesionLista || (!cuenta && !publica)) {
-    return (
-      <div
-        role="status"
-        className="flex min-h-dvh items-center justify-center text-sm text-muted-foreground"
-      >
-        Cargando…
-      </div>
-    );
+    // pages with app chrome get a skeleton of it; the login and the TV view stay minimal
+    if (publica || pathname.startsWith("/pantalla")) {
+      return (
+        <div
+          role="status"
+          className="flex min-h-dvh items-center justify-center text-sm text-muted-foreground"
+        >
+          Cargando…
+        </div>
+      );
+    }
+    return <PantallaCarga />;
   }
   return (
     <>

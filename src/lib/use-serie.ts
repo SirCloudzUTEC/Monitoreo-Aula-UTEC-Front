@@ -23,6 +23,8 @@ export function useSerie(
   magnitud: Magnitud,
   minutos: number,
   pasoMin = 1,
+  /** false defers the request (e.g. until the chart scrolls into view) */
+  activa = true,
 ): PuntoSerie[] {
   const habilitado = useHabilitado();
   const pasoMs = pasoMin * 60_000;
@@ -32,8 +34,14 @@ export function useSerie(
       const hasta = new Date();
       return serieAula(aula, magnitud, new Date(hasta.getTime() - minutos * 60_000), hasta, pasoMs);
     },
-    enabled: habilitado && !SIN_SERIE.includes(magnitud),
+    enabled: habilitado && activa && !SIN_SERIE.includes(magnitud),
     refetchInterval: Math.max(30_000, Math.min(pasoMs, 60_000)),
+    // a series only changes at bucket cadence: coming back to the tab must not refetch every chart
+    staleTime: 25_000,
+    // switching the range keeps the previous chart on screen until the new one arrives, but never
+    // another room's or another magnitude's chart
+    placeholderData: (previa, consultaPrevia) =>
+      consultaPrevia?.queryKey[1] === aula && consultaPrevia.queryKey[2] === magnitud ? previa : undefined,
   });
   return data ?? EMPTY;
 }

@@ -3,10 +3,12 @@
 // Per-classroom summary at the top of the dashboard: state, current/next
 // class, occupancy vs capacity and quick comfort readings.
 
+import { memo } from "react";
 import Link from "next/link";
 import { CalendarClockIcon, MonitorIcon, UsersIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AvisoObsoleto } from "@/components/modules/aviso-obsoleto";
 import { getAula } from "@/lib/aulas";
 import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
@@ -24,8 +26,10 @@ const MODULO_DE_MEDICION: Record<"temperatura" | "humedad" | "co2" | "ruido", Mo
   ruido: "ruido",
 };
 
-export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
+export const AulaSummaryCard = memo(function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
   const { estados, valores: todos, antiguedadMs, nowMs: simNowMs } = useEstados();
+  // null until this room's first response: nothing below is real data before that
+  const cargado = antiguedadMs[aula] !== null;
   const estado = estados[aula];
   const valores = todos[aula];
   const { umbrales } = useUmbrales();
@@ -46,11 +50,15 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
           <Link href={`/aula/${aula}`} className="font-semibold hover:underline">
             {spec.nombre}
           </Link>
-          <span
-            className={cn("rounded-full px-3 py-0.5 text-sm font-medium", CLASE_ESTADO[estado])}
-          >
-            {ETIQUETA_ESTADO[estado]}
-          </span>
+          {cargado ? (
+            <span
+              className={cn("rounded-full px-3 py-0.5 text-sm font-medium", CLASE_ESTADO[estado])}
+            >
+              {ETIQUETA_ESTADO[estado]}
+            </span>
+          ) : (
+            <Skeleton className="h-6 w-20 rounded-full" />
+          )}
           <a
             href={`/pantalla/${aula}`}
             target="_blank"
@@ -66,7 +74,9 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
         <AvisoObsoleto antiguedadMs={antiguedadMs[aula]} />
         <div className="flex items-center gap-2 text-muted-foreground">
           <CalendarClockIcon className="size-4 shrink-0" aria-hidden />
-          {bloque ? (
+          {!cargado ? (
+            <Skeleton className="h-5 w-56 max-w-full" />
+          ) : bloque ? (
             <span>
               <span className="font-medium text-foreground">{bloque.curso}</span> · termina en{" "}
               {minutosRestantes(horario, aula, fecha)} min
@@ -84,24 +94,33 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
         <div>
           <div className="mb-1.5 flex items-center gap-2">
             <UsersIcon className="size-4 text-muted-foreground" aria-hidden />
-            <span className="font-medium tabular-nums">
-              {ocupacion} / {spec.aforo} personas
-            </span>
-            {ocupacion > spec.aforo && (
+            {cargado ? (
+              <span className="font-medium tabular-nums">
+                {ocupacion} / {spec.aforo} personas
+              </span>
+            ) : (
+              <Skeleton className="h-5 w-32" />
+            )}
+            {cargado && ocupacion > spec.aforo && (
               <span className="text-sm font-semibold text-red-600">¡Aforo excedido!</span>
             )}
           </div>
-          <Progress value={Math.min(100, (ocupacion / spec.aforo) * 100)} />
+          <Progress value={cargado ? Math.min(100, (ocupacion / spec.aforo) * 100) : 0} />
         </div>
         <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
           {(["temperatura", "humedad", "co2", "ruido"] as const).map((m) => {
             const modulo = MODULO_DE_MEDICION[m];
-            const semaforo = semaforoModulo(modulo, valores, umbrales, abiertos, aula, enClase);
+            const semaforo = cargado
+              ? semaforoModulo(modulo, valores, umbrales, abiertos, aula, enClase)
+              : "verde";
             return (
               <Link
                 key={m}
                 href={`/modulo/${modulo}?aula=${aula}`}
-                className={cn("rounded-lg p-3 transition-colors", CLASE_FONDO_SEMAFORO[semaforo])}
+                className={cn(
+                  "rounded-lg p-3 transition-colors",
+                  cargado ? CLASE_FONDO_SEMAFORO[semaforo] : "bg-muted/50",
+                )}
                 title={
                   semaforo === "rojo"
                     ? "Con alerta: ver módulo"
@@ -120,7 +139,7 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
                         : "Ruido"}
                 </div>
                 <div className="font-mono text-base font-semibold tabular-nums">
-                  {formatearValor(m, valores[m])}
+                  {cargado ? formatearValor(m, valores[m]) : <Skeleton className="mx-auto h-5 w-14" />}
                 </div>
               </Link>
             );
@@ -137,4 +156,4 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
       </CardContent>
     </Card>
   );
-}
+});

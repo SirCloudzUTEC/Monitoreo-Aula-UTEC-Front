@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FilasSkeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -275,7 +276,7 @@ export default function UsuariosPage() {
         </CardHeader>
         <CardContent>
           {cargando ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <FilasSkeleton filas={5} columnas={4} />
           ) : usuarios.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay cuentas.</p>
           ) : (

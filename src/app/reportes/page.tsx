@@ -6,12 +6,13 @@
 // report or close it. The backend enforces the same privacy rule.
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Link from "next/link";
 import { ClipboardListIcon, SendIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FilasSkeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -52,6 +53,8 @@ export default function ReportesPage() {
     queryFn: () => listarIncidentes({ propios: !verTodos, page: pagina, size: POR_PAGINA }),
     enabled: habilitado,
     refetchInterval: 30_000,
+    // paging keeps the current list on screen until the next page arrives
+    placeholderData: keepPreviousData,
   });
   const reportes: Incidente[] = consulta.data?.content ?? [];
   const totalPaginas = Math.max(1, Math.ceil((consulta.data?.totalElements ?? 0) / POR_PAGINA));
@@ -104,7 +107,7 @@ export default function ReportesPage() {
               </p>
             )}
             {cargando ? (
-              <p className="text-sm text-muted-foreground">Cargando…</p>
+              <FilasSkeleton filas={5} columnas={4} />
             ) : reportes.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {verTodos

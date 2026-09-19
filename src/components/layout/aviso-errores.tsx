@@ -24,7 +24,9 @@ function instantanea(qc: QueryClient): string {
     .getAll()
     .filter((q) => q.state.status === "error" && q.state.fetchStatus === "idle");
   if (fallidas.length === 0) return "";
-  return `${fallidas.length}\u0000${textoDe(fallidas[0].state.error)}`;
+  // one failing endpoint queried per room/magnitude counts once, not once per query
+  const conjuntos = new Set(fallidas.map((q) => String(q.queryKey[0])));
+  return `${conjuntos.size}\u0000${textoDe(fallidas[0].state.error)}`;
 }
 
 export function AvisoErrores({ conectado }: { conectado: boolean }) {

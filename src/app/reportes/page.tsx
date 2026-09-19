@@ -1,15 +1,18 @@
 "use client";
 
-// Lists incident reports from /api/reportes: a plain member sees only
-// their own reports, an account with atender_incidentes (admin_operativo/
-// superadmin) sees every report with who filed it. No session, no list —
-// same privacy rule the API enforces server-side.
+// Lists incident reports from `GET /api/incidentes`: a plain member sees only
+// their own reports (`propios=true`), an account with atender_incidentes
+// (admin_operativo/superadmin) sees the operational list and can take a
+// report or close it. The backend enforces the same privacy rule.
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import Link from "next/link";
 import { ClipboardListIcon, SendIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FilasSkeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -19,62 +22,51 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
+import { useHabilitado } from "@/lib/api/hooks";
+import {
+  atenderIncidente,
+  listarIncidentes,
+  resolverIncidente,
+  type Incidente,
+} from "@/lib/api/endpoints";
+import { mensajeDeError } from "@/lib/api/client";
 import { puede } from "@/lib/auth/identity";
 import {
   CATALOGO_INCIDENTES,
   CLASE_PRIORIDAD,
   CLASE_ESTADO_INCIDENTE,
   ETIQUETA_ESTADO_INCIDENTE,
-  type CategoriaIncidente,
-  type EstadoIncidente,
-  type PrioridadIncidente,
 } from "@/lib/incidents/catalog";
 import { fechaHoraDeIso } from "@/lib/format";
 
-interface ReporteFila {
-  id: number;
-  categoria: CategoriaIncidente;
-  prioridad: PrioridadIncidente;
-  ubicacion: string;
-  descripcion: string;
-  estado: EstadoIncidente;
-  creado_en: string;
-  reportado_por_email: string | null;
-}
+const POR_PAGINA = 20;
 
 export default function ReportesPage() {
   const cuenta = useApp((s) => s.cuenta);
   const verTodos = cuenta ? puede(cuenta, "atender_incidentes") : false;
+  const habilitado = useHabilitado("reportar_incidente");
+  const qc = useQueryClient();
+  const [pagina, setPagina] = useState(0);
 
-  const [reportes, setReportes] = useState<ReporteFila[]>([]);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const consulta = useQuery({
+    queryKey: ["incidentes", verTodos, pagina],
+    queryFn: () => listarIncidentes({ propios: !verTodos, page: pagina, size: POR_PAGINA }),
+    enabled: habilitado,
+    refetchInterval: 30_000,
+    // paging keeps the current list on screen until the next page arrives
+    placeholderData: keepPreviousData,
+  });
+  const reportes: Incidente[] = consulta.data?.content ?? [];
+  const totalPaginas = Math.max(1, Math.ceil((consulta.data?.totalElements ?? 0) / POR_PAGINA));
+  const cargando = consulta.isPending && habilitado;
+  const error = consulta.isError ? mensajeDeError(consulta.error, "No se pudieron cargar los reportes.") : null;
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    const res = await fetch("/api/reportes").catch(() => null);
-    if (!res) {
-      setError("Sin conexión con el servidor.");
-      setCargando(false);
-      return;
-    }
-    const data = (await res.json().catch(() => null)) as
-      | { reportes?: ReporteFila[]; configurada?: boolean }
-      | null;
-    if (!res.ok || !data?.configurada) {
-      setError("La base de datos no está disponible en este entorno.");
-      setReportes([]);
-    } else {
-      setError(null);
-      setReportes(data.reportes ?? []);
-    }
-    setCargando(false);
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void cargar();
-  }, [cargar]);
+  const cambiar = useMutation({
+    mutationFn: (accion: { id: number; a: "atender" | "resuelto" | "descartado" }) =>
+      accion.a === "atender" ? atenderIncidente(accion.id) : resolverIncidente(accion.id, accion.a),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["incidentes"] }),
+    onError: (e) => toast.error(mensajeDeError(e, "No se pudo actualizar el reporte.")),
+  });
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
@@ -115,7 +107,7 @@ export default function ReportesPage() {
               </p>
             )}
             {cargando ? (
-              <p className="text-sm text-muted-foreground">Cargando…</p>
+              <FilasSkeleton filas={5} columnas={4} />
             ) : reportes.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {verTodos
@@ -132,6 +124,7 @@ export default function ReportesPage() {
                     <TableHead>Estado</TableHead>
                     <TableHead>Fecha</TableHead>
                     {verTodos && <TableHead>Reportado por</TableHead>}
+                    {verTodos && <TableHead>Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -161,17 +154,75 @@ export default function ReportesPage() {
                         </span>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {fechaHoraDeIso(r.creado_en)}
+                        {fechaHoraDeIso(r.creadoEn)}
                       </TableCell>
                       {verTodos && (
                         <TableCell className="font-mono text-xs">
-                          {r.reportado_por_email ?? "—"}
+                          {r.reportadoPorEmail ?? `usuario #${r.reportadoPor}`}
+                        </TableCell>
+                      )}
+                      {verTodos && (
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {r.estado === "abierto" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={cambiar.isPending}
+                                onClick={() => cambiar.mutate({ id: r.id, a: "atender" })}
+                              >
+                                Atender
+                              </Button>
+                            )}
+                            {(r.estado === "abierto" || r.estado === "en_atencion") && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  disabled={cambiar.isPending}
+                                  onClick={() => cambiar.mutate({ id: r.id, a: "resuelto" })}
+                                >
+                                  Resolver
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={cambiar.isPending}
+                                  onClick={() => cambiar.mutate({ id: r.id, a: "descartado" })}
+                                >
+                                  Descartar
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+            )}
+            {totalPaginas > 1 && (
+              <div className="flex items-center justify-between text-sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pagina === 0}
+                  onClick={() => setPagina(pagina - 1)}
+                >
+                  ← Anterior
+                </Button>
+                <span className="text-muted-foreground">
+                  Página {pagina + 1} de {totalPaginas}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pagina >= totalPaginas - 1}
+                  onClick={() => setPagina(pagina + 1)}
+                >
+                  Siguiente →
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>

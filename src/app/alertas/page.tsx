@@ -15,7 +15,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EventoCard, ETIQUETA_SEVERIDAD } from "@/components/events/evento-card";
-import { useApp, CODIGOS_AULA, estaEscalado } from "@/lib/store";
+import { estaEscalado } from "@/lib/store";
+import { CODIGOS_AULA } from "@/lib/aulas";
+import { useEstados, useEventosAbiertos, useEventosCerrados } from "@/lib/api/hooks";
 import { TIPOS_FUERA_NOMINAL } from "@/lib/events/catalog";
 import type { AulaCodigo, Evento, Severidad } from "@/lib/types";
 
@@ -23,9 +25,9 @@ type FiltroAula = AulaCodigo | "todas";
 type FiltroSev = Severidad | "todas";
 
 export default function AlertasPage() {
-  const abiertos = useApp((s) => s.abiertos);
-  const log = useApp((s) => s.log);
-  const simNowMs = useApp((s) => s.simNowMs);
+  const { abiertos } = useEventosAbiertos();
+  const cerrados = useEventosCerrados();
+  const { nowMs: simNowMs } = useEstados();
   const [aula, setAula] = useState<FiltroAula>("todas");
   const [sev, setSev] = useState<FiltroSev>("todas");
 
@@ -38,13 +40,9 @@ export default function AlertasPage() {
   const escaladas = abiertas.filter((e) => estaEscalado(e, simNowMs)).length;
 
   const historial = useMemo(() => {
-    const idsAbiertos = new Set(abiertos.map((e) => e.id_evento));
     const fuera = new Set<string>(TIPOS_FUERA_NOMINAL);
-    return log
-      .filter((r) => fuera.has(r.tipo) && !idsAbiertos.has(r.id_evento))
-      .slice(-500)
-      .reverse() as unknown as Evento[];
-  }, [log, abiertos]);
+    return cerrados.filter((e) => fuera.has(e.tipo));
+  }, [cerrados]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">

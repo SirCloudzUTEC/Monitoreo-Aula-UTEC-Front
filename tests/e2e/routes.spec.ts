@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { contextoAnonimo, expect, login, test } from "./helpers";
 
 for (const path of [
   "/",
@@ -8,9 +8,7 @@ for (const path of [
   "/pantalla/A-1001",
   "/importar",
   "/log",
-  "/simulador",
   "/asistente",
-  "/acceso",
   "/reportar",
 ]) {
   test(`desktop route ${path} loads without JavaScript errors`, async ({
@@ -18,6 +16,7 @@ for (const path of [
   }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    await login(page);
     const response = await page.goto(path, { waitUntil: "networkidle" });
     expect(response?.status()).toBe(200);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -41,6 +40,7 @@ for (const path of ["/", "/aula/L-419", "/ajustes"]) {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setViewportSize({ width: 390, height: 844 });
+    await login(page);
     await page.goto(path, { waitUntil: "networkidle" });
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     const overflow = await page.evaluate(
@@ -50,3 +50,14 @@ for (const path of ["/", "/aula/L-419", "/ajustes"]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("the login page loads without JavaScript errors", async ({ browser }) => {
+  const contexto = await contextoAnonimo(browser);
+  const page = await contexto.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/acceso", { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  expect(errors).toEqual([]);
+  await contexto.close();
+});

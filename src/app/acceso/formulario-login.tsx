@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { useApp } from "@/lib/store";
+import { ApiError } from "@/lib/api/client";
+import { login } from "@/lib/api/endpoints";
+import { destinoSeguro } from "@/lib/api/session";
 
 export function FormularioLogin() {
   const router = useRouter();
@@ -15,20 +18,21 @@ export function FormularioLogin() {
     e.preventDefault();
     setEnviando(true);
     setError(null);
-    const res = await signIn("credenciales", {
-      email: email.trim().toLowerCase(),
-      password,
-      redirect: false,
-    });
-    setEnviando(false);
-    if (res?.error) {
+    try {
+      const cuenta = await login(email.trim().toLowerCase(), password);
+      useApp.getState().setCuenta(cuenta);
+      router.replace(destinoSeguro(new URLSearchParams(window.location.search).get("next")));
+    } catch (err) {
       setError(
-        "No se pudo iniciar sesión. Verifica tu correo y contraseña; si fallaste varias veces la cuenta puede estar bloqueada temporalmente.",
+        err instanceof ApiError && err.sinConexion
+          ? "No se pudo contactar al servidor. Revisa tu conexión e inténtalo de nuevo."
+          : err instanceof ApiError && err.status === 429
+            ? "Demasiados intentos. Espera unos minutos antes de volver a intentarlo."
+            : "No se pudo iniciar sesión. Verifica tu correo y contraseña; si fallaste varias veces la cuenta puede estar bloqueada temporalmente.",
       );
-      return;
+    } finally {
+      setEnviando(false);
     }
-    router.push("/");
-    router.refresh();
   };
 
   return (

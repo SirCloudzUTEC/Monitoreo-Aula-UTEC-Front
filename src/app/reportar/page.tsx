@@ -1,12 +1,12 @@
 "use client";
 
-// Community incident reporting backed by /api/reportes (Neon PostgreSQL).
-// The page shows exactly which operational team is notified, and reports
-// honestly whether the database stored the report.
+// Community incident reporting backed by `POST /api/incidentes` (Spring Boot).
+// The page shows exactly which operational team is notified; the report is
+// always attributed to the signed-in account.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { SirenIcon, SendIcon, PhoneCallIcon, DatabaseIcon } from "lucide-react";
+import { SirenIcon, SendIcon, PhoneCallIcon } from "lucide-react";
 import {
   CATALOGO_INCIDENTES,
   CATEGORIAS_ORDENADAS,
@@ -16,6 +16,8 @@ import {
   type CategoriaIncidente,
 } from "@/lib/incidents/catalog";
 import { Button } from "@/components/ui/button";
+import { crearIncidente } from "@/lib/api/endpoints";
+import { mensajeDeError } from "@/lib/api/client";
 import {
   Select,
   SelectContent,
@@ -38,24 +40,8 @@ export default function ReportarPage() {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [guardados, setGuardados] = useState<ReporteGuardado[]>([]);
-  const [bd, setBd] = useState<{ configurada: boolean; total: number } | null>(null);
 
   const info = CATALOGO_INCIDENTES[categoria];
-
-  useEffect(() => {
-    let cancelado = false;
-    fetch("/api/reportes")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelado && data) setBd(data);
-      })
-      .catch(() => {
-        // Status stays unknown; submitting still reports the real outcome.
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, []);
 
   const enviar = async () => {
     const r = validarBorrador({ categoria, ubicacion, descripcion });
@@ -66,29 +52,12 @@ export default function ReportarPage() {
     setError(null);
     setEnviando(true);
     try {
-      const res = await fetch("/api/reportes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(r.borrador),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(
-          data?.error ?? "No se pudo enviar el reporte. Inténtalo nuevamente.",
-        );
-        return;
-      }
-      setGuardados((prev) => [
-        { id: data.id, ...r.borrador },
-        ...prev,
-      ]);
-      setBd((prev) =>
-        prev ? { ...prev, total: prev.total + 1 } : prev,
-      );
+      const creado = await crearIncidente(r.borrador);
+      setGuardados((prev) => [{ id: creado.id, ...r.borrador }, ...prev]);
       setUbicacion("");
       setDescripcion("");
-    } catch {
-      setError("Sin conexión con el servidor. El reporte no fue enviado.");
+    } catch (e) {
+      setError(mensajeDeError(e, "No se pudo enviar el reporte. Inténtalo nuevamente."));
     } finally {
       setEnviando(false);
     }
@@ -105,14 +74,6 @@ export default function ReportarPage() {
           Tu reporte llega al personal correspondiente según la categoría.
           En emergencias graves llama primero a Seguridad UTEC o al 105/106.
         </p>
-        {bd && (
-          <p className="mt-3 flex items-center gap-1.5 text-sm text-muted-foreground">
-            <DatabaseIcon className="size-4" aria-hidden />
-            {bd.configurada
-              ? `Base de datos conectada · ${bd.total} reporte${bd.total === 1 ? "" : "s"} registrado${bd.total === 1 ? "" : "s"}`
-              : "Base de datos pendiente de configurar en este entorno"}
-          </p>
-        )}
       </header>
 
       <div className="glow-border space-y-4 rounded-xl border bg-card p-4 shadow-sm">
@@ -202,18 +163,18 @@ export default function ReportarPage() {
           {enviando ? "Enviando…" : "Enviar reporte"}
         </Button>
         <p className="text-xs text-muted-foreground">
-          Con sesión iniciada, el reporte queda a tu nombre y puedes verlo en{" "}
+          El reporte queda a tu nombre y puedes verlo en{" "}
           <Link href="/reportes" className="underline underline-offset-4">
             Reportes
           </Link>
-          . Sin sesión, se registra como demostración sin identificar al autor.
+          .
         </p>
       </div>
 
       {guardados.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">
-            Reportes guardados en la base de datos
+            Reportes enviados en esta sesión
           </h2>
           <ul className="space-y-2">
             {guardados.map((r) => (

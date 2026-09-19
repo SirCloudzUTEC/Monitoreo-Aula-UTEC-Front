@@ -1,12 +1,11 @@
 "use client";
 
-// F8 — settings: account (Auth.js), thresholds (validated by the API,
-// criterio 7), weekly schedule, contacts, push notifications and sound.
-// Every change is confirmed and logged with the signed-in account's email.
+// F8 — settings: account, thresholds and weekly schedule (persisted by the
+// backend, which authorizes, validates and audits every change), contacts,
+// push notifications and sound.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import {
   BellIcon,
@@ -28,7 +27,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { useApp } from "@/lib/store";
+import { CODIGOS_AULA } from "@/lib/aulas";
+import {
+  useCerrarSesion,
+  useGuardarHorario,
+  useGuardarUmbrales,
+  useHorario,
+  useUmbrales,
+} from "@/lib/api/hooks";
+import { mensajeDeError } from "@/lib/api/client";
 import { puede } from "@/lib/auth/identity";
 import { loadLocal, saveLocal } from "@/lib/data/storage";
 import { DIAS_SEMANA } from "@/lib/schedule";
@@ -41,6 +49,7 @@ import {
 } from "@/lib/notify/push-client";
 import type { AulaCodigo, BloqueHorario, Horario, Umbrales } from "@/lib/types";
 import { useOnline } from "@/lib/use-online";
+import { CambiarPassword } from "@/app/ajustes/cambiar-password";
 
 interface CampoUmbral {
   key: keyof Umbrales;
@@ -137,14 +146,19 @@ export default function AjustesPage() {
   const setSonido = useApp((s) => s.setSonido);
   const prefsAulas = useApp((s) => s.prefsAulas);
   const setPrefsAulas = useApp((s) => s.setPrefsAulas);
-  const umbrales = useApp((s) => s.umbrales);
-  const setUmbrales = useApp((s) => s.setUmbrales);
-  const horario = useApp((s) => s.horario);
-  const setHorario = useApp((s) => s.setHorario);
+  const { umbrales, listo: umbralesListos } = useUmbrales();
+  const { horario, listo: horarioListo } = useHorario();
+  const guardarUmbralesApi = useGuardarUmbrales();
+  const guardarHorarioApi = useGuardarHorario();
+  const cerrarSesion = useCerrarSesion();
 
   const online = useOnline();
   const esAdmin =
     online && (cuenta ? puede(cuenta, "gestionar_dispositivos") : false);
+  // Until the live values arrive the form shows placeholders; saving those would
+  // overwrite the real thresholds/schedule with defaults.
+  const puedeEditarUmbrales = esAdmin && umbralesListos;
+  const puedeEditarHorario = esAdmin && horarioListo;
   const puedeRecibirAlertas =
     online && (cuenta ? puede(cuenta, "recibir_alertas") : false);
   const [borrador, setBorrador] = useState<Record<string, string>>({});
@@ -179,28 +193,14 @@ export default function AjustesPage() {
         nuevos[c.key] = v;
       }
     }
-    // the API authorizes and validates (criterio 7: rejects non-admin writes)
-    const res = await fetch("/api/umbrales", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(nuevos),
-    }).catch(() => null);
-    if (!res) {
-      toast.error("Sin conexión: no se guardaron los cambios.");
+    try {
+      await guardarUmbralesApi.mutateAsync(nuevos);
+    } catch (e) {
+      toast.error(mensajeDeError(e, "No se pudieron guardar los umbrales."));
       return;
     }
-    if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      toast.error(
-        data?.error ?? `La API rechazó el cambio (HTTP ${res.status}).`,
-      );
-      return;
-    }
-    if (!(await setUmbrales(nuevos))) return;
     setBorrador({});
-    toast.success("Umbrales guardados y registrados en el log.");
+    toast.success("Umbrales guardados; el cambio queda auditado en el servidor.");
   };
 
   const h = horarioBorrador ?? horario;
@@ -238,9 +238,14 @@ export default function AjustesPage() {
         }
       }
     }
-    if (!(await setHorario(h))) return;
+    try {
+      await guardarHorarioApi.mutateAsync({ nuevo: h, actual: horario });
+    } catch (e) {
+      toast.error(mensajeDeError(e, "No se pudo guardar el horario."));
+      return;
+    }
     setHorarioBorrador(null);
-    toast.success("Horario guardado y registrado en el log.");
+    toast.success("Horario guardado.");
   };
 
   const guardarContactos = async () => {
@@ -286,7 +291,7 @@ export default function AjustesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void signOut({ callbackUrl: "/acceso" })}
+                onClick={() => void cerrarSesion()}
               >
                 Cerrar sesión
               </Button>
@@ -313,11 +318,13 @@ export default function AjustesPage() {
           )}
           <p className="w-full text-xs text-muted-foreground">
             Solo una cuenta administradora o superusuaria puede editar
-            umbrales, horario y usar el simulador. La app no captura
+            umbrales y horario. La app no captura
             imágenes ni audio.
           </p>
         </CardContent>
       </Card>
+
+      {cuenta && <CambiarPassword />}
 
       {/* notifications */}
       <Card>
@@ -342,7 +349,7 @@ export default function AjustesPage() {
                   size="sm"
                   disabled={!esAdmin}
                   onClick={async () => {
-                    const err = await probarPush();
+                    const err = await probarPush(cuenta?.email ?? "");
                     if (err) toast.error(err);
                     else toast.success("Notificación de prueba enviada.");
                   }}
@@ -453,6 +460,11 @@ export default function AjustesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {esAdmin && !umbralesListos && (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Cargando los umbrales vigentes del servidor…
+            </p>
+          )}
           {!esAdmin && (
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
               Solo lectura: necesitas una cuenta administradora o superusuaria
@@ -475,7 +487,7 @@ export default function AjustesPage() {
                     type="number"
                     step="any"
                     min={0}
-                    disabled={!esAdmin}
+                    disabled={!puedeEditarUmbrales}
                     value={valorCampo(c.key)}
                     onChange={(e) =>
                       setBorrador((b) => ({ ...b, [c.key]: e.target.value }))
@@ -486,7 +498,7 @@ export default function AjustesPage() {
             </fieldset>
           ))}
           <div>
-            <Button onClick={guardarUmbrales} disabled={!esAdmin}>
+            <Button onClick={guardarUmbrales} disabled={!puedeEditarUmbrales}>
               Guardar umbrales
             </Button>
           </div>
@@ -512,7 +524,7 @@ export default function AjustesPage() {
                       onValueChange={(v) =>
                         editarBloque(a, i, { dia: Number(v) })
                       }
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                     >
                       <SelectTrigger className="w-32" aria-label="Día">
                         <SelectValue />
@@ -529,7 +541,7 @@ export default function AjustesPage() {
                       type="time"
                       className="w-28"
                       value={b.inicio}
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                       onChange={(e) =>
                         editarBloque(a, i, { inicio: e.target.value })
                       }
@@ -539,7 +551,7 @@ export default function AjustesPage() {
                       type="time"
                       className="w-28"
                       value={b.fin}
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                       onChange={(e) =>
                         editarBloque(a, i, { fin: e.target.value })
                       }
@@ -548,13 +560,13 @@ export default function AjustesPage() {
                     <Input
                       className="w-48 flex-1"
                       value={b.curso}
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                       onChange={(e) =>
                         editarBloque(a, i, { curso: e.target.value })
                       }
                       aria-label="Curso"
                     />
-                    {esAdmin && (
+                    {puedeEditarHorario && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -565,7 +577,7 @@ export default function AjustesPage() {
                     )}
                   </div>
                 ))}
-                {esAdmin && (
+                {puedeEditarHorario && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -581,7 +593,7 @@ export default function AjustesPage() {
           <div>
             <Button
               onClick={guardarHorario}
-              disabled={!esAdmin || !horarioBorrador}
+              disabled={!puedeEditarHorario || !horarioBorrador}
             >
               Guardar horario
             </Button>

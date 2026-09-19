@@ -1,11 +1,13 @@
 "use client";
 
-// Admin-only user management. There is no self-registration anymore: a
-// superusuario is the only one who can create an account, and does so by
-// picking the new account's email and role — the server generates the
-// password and returns it once so it can be handed to that person.
+// Admin-only user management. There is no self-registration: a superusuario
+// is the only one who can create an account, and does so by picking the new
+// account's email and role — the backend generates the password and returns it
+// once so it can be handed to that person. Existing accounts can be suspended,
+// re-roled or given a fresh password (all of which revoke their sessions).
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { UserPlusIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FilasSkeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -29,76 +32,110 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
-import { puede, type Rol } from "@/lib/auth/identity";
+import { useHabilitado } from "@/lib/api/hooks";
+import {
+  cambiarRol,
+  crearUsuario,
+  listarUsuarios,
+  reactivarUsuario,
+  restablecerPassword,
+  type Usuario,
+  suspenderUsuario,
+} from "@/lib/api/endpoints";
+import { mensajeDeError } from "@/lib/api/client";
+import { puede, type Ambito, type Rol } from "@/lib/auth/identity";
+import { ETIQUETA_AMBITO } from "@/lib/incidents/catalog";
+import { SelectorAmbitos } from "@/app/usuarios/selector-ambitos";
+import {
+  EditarUsuario,
+  ETIQUETA_ROL,
+  ambitosPara,
+  errorDeRol,
+} from "@/app/usuarios/editar-usuario";
 
-const ETIQUETA_ROL: Record<Rol, string> = {
-  miembro: "Usuario (solo visualización)",
-  admin_operativo: "Administrador (aulas y planos)",
-  superadmin: "Superusuario (gestión de usuarios)",
-};
-
-interface UsuarioFila {
-  email: string;
-  nombre: string;
-  rol: Rol;
-  estado: string;
-  creado_en: string;
-}
 
 export default function UsuariosPage() {
   const cuenta = useApp((s) => s.cuenta);
   const autorizado = cuenta ? puede(cuenta, "gestionar_usuarios") : false;
+  const habilitado = useHabilitado("gestionar_usuarios");
+  const qc = useQueryClient();
 
-  const [usuarios, setUsuarios] = useState<UsuarioFila[]>([]);
-  const [cargando, setCargando] = useState(true);
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<Rol>("miembro");
-  const [enviando, setEnviando] = useState(false);
+  const [ambitos, setAmbitos] = useState<Ambito[]>([]);
+  const [editando, setEditando] = useState<Usuario | null>(null);
   const [creada, setCreada] = useState<{ email: string; password: string } | null>(
     null,
   );
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    const res = await fetch("/api/usuarios").catch(() => null);
-    const data = (await res?.json().catch(() => null)) as
-      | { usuarios?: UsuarioFila[] }
-      | null;
-    setUsuarios(data?.usuarios ?? []);
-    setCargando(false);
-  }, []);
+  const lista = useQuery({
+    queryKey: ["usuarios"],
+    queryFn: listarUsuarios,
+    enabled: habilitado,
+  });
+  const usuarios = lista.data ?? [];
+  const cargando = lista.isPending && habilitado;
+  const refrescar = () => qc.invalidateQueries({ queryKey: ["usuarios"] });
+  const alFallar = (e: unknown) => toast.error(mensajeDeError(e, "No se pudo completar la acción."));
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (autorizado) void cargar();
-  }, [autorizado, cargar]);
+  const crear = useMutation({
+    mutationFn: crearUsuario,
+    onSuccess: (r) => {
+      setCreada(r);
+      setNombre("");
+      setEmail("");
+      setRol("miembro");
+      setAmbitos([]);
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const suspender = useMutation({
+    mutationFn: suspenderUsuario,
+    onSuccess: () => {
+      toast.success("Cuenta suspendida; sus sesiones quedaron revocadas.");
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const reasignarRol = useMutation({
+    mutationFn: (v: { id: number; rol: Rol; ambitos: Ambito[] }) => cambiarRol(v.id, v.rol, v.ambitos),
+    onSuccess: () => {
+      toast.success("Cuenta actualizada.");
+      setEditando(null);
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const reactivar = useMutation({
+    mutationFn: reactivarUsuario,
+    onSuccess: () => {
+      toast.success("Cuenta reactivada.");
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const nuevaClave = useMutation({
+    mutationFn: restablecerPassword,
+    onSuccess: (r) => setCreada(r),
+    onError: alFallar,
+  });
 
-  const crear = async (e: React.FormEvent) => {
+  const enviando = crear.isPending;
+  const enviar = (e: React.FormEvent) => {
     e.preventDefault();
-    setEnviando(true);
-    const res = await fetch("/api/usuarios", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: nombre.trim(), email: email.trim().toLowerCase(), rol }),
-    }).catch(() => null);
-    setEnviando(false);
-    if (!res) {
-      toast.error("Sin conexión: no se creó la cuenta.");
+    const problema = errorDeRol(rol, ambitos);
+    if (problema) {
+      toast.error(problema);
       return;
     }
-    const data = (await res.json().catch(() => null)) as
-      | { ok?: boolean; email?: string; password?: string; error?: string }
-      | null;
-    if (!res.ok || !data?.ok || !data.password) {
-      toast.error(data?.error ?? "No se pudo crear la cuenta.");
-      return;
-    }
-    setCreada({ email: data.email ?? email, password: data.password });
-    setNombre("");
-    setEmail("");
-    setRol("miembro");
-    void cargar();
+    crear.mutate({
+      nombre: nombre.trim(),
+      email: email.trim().toLowerCase(),
+      rol,
+      ambitos: ambitosPara(rol, ambitos),
+    });
   };
 
   const copiar = async (texto: string) => {
@@ -147,8 +184,8 @@ export default function UsuariosPage() {
           {creada && (
             <div className="space-y-2 rounded-md border border-emerald-300/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-950/40 dark:text-emerald-200">
               <p>
-                Cuenta creada para <strong>{creada.email}</strong>. Entrégale esta
-                contraseña por un canal seguro; no se volverá a mostrar.
+                Contraseña de <strong>{creada.email}</strong>. Entrégala por un canal
+                seguro; no se volverá a mostrar.
               </p>
               <div className="flex items-center gap-2">
                 <code className="rounded bg-background/60 px-2 py-1 font-mono text-sm">
@@ -173,7 +210,7 @@ export default function UsuariosPage() {
               </div>
             </div>
           )}
-          <form onSubmit={crear} className="grid gap-3 sm:grid-cols-2">
+          <form onSubmit={enviar} className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <Label htmlFor="nuevo-nombre" className="text-xs text-muted-foreground">
                 Nombre completo
@@ -216,6 +253,14 @@ export default function UsuariosPage() {
                 </SelectContent>
               </Select>
             </div>
+            {rol === "admin_operativo" && (
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label className="text-xs text-muted-foreground">
+                  Ámbitos de incidentes (al menos uno)
+                </Label>
+                <SelectorAmbitos valor={ambitos} onChange={setAmbitos} />
+              </div>
+            )}
             <div className="sm:col-span-2">
               <Button type="submit" disabled={enviando}>
                 {enviando ? "Creando…" : "Crear cuenta y generar contraseña"}
@@ -231,7 +276,7 @@ export default function UsuariosPage() {
         </CardHeader>
         <CardContent>
           {cargando ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <FilasSkeleton filas={5} columnas={4} />
           ) : usuarios.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no hay cuentas.</p>
           ) : (
@@ -243,17 +288,70 @@ export default function UsuariosPage() {
                   <TableHead>Rol</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Creada</TableHead>
+                  <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {usuarios.map((u) => (
-                  <TableRow key={u.email}>
+                  <TableRow key={u.id}>
                     <TableCell className="font-mono text-xs">{u.email}</TableCell>
                     <TableCell>{u.nombre || "—"}</TableCell>
-                    <TableCell>{ETIQUETA_ROL[u.rol] ?? u.rol}</TableCell>
+                    <TableCell>
+                      <div>{ETIQUETA_ROL[u.rol] ?? u.rol}</div>
+                      {u.rol === "admin_operativo" && (
+                        <div className="text-xs text-muted-foreground">
+                          {u.ambitos.length > 0
+                            ? u.ambitos.map((a) => ETIQUETA_AMBITO[a] ?? a).join(", ")
+                            : "sin ámbitos"}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="capitalize">{u.estado}</TableCell>
                     <TableCell>
-                      {new Date(u.creado_en).toLocaleDateString("es-PE")}
+                      {new Date(u.creadoEn).toLocaleDateString("es-PE")}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {u.email !== cuenta?.email && (
+                          <Button size="sm" variant="outline" onClick={() => setEditando(u)}>
+                            Editar
+                          </Button>
+                        )}
+                        {u.estado === "suspendida" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={reactivar.isPending}
+                            onClick={() => reactivar.mutate(u.id)}
+                          >
+                            Reactivar
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={nuevaClave.isPending}
+                          onClick={() => {
+                            if (window.confirm(`¿Generar una nueva contraseña para ${u.email}? Se cerrarán sus sesiones.`))
+                              nuevaClave.mutate(u.id);
+                          }}
+                        >
+                          Nueva contraseña
+                        </Button>
+                        {u.estado === "aprobada" && u.email !== cuenta?.email && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={suspender.isPending}
+                            onClick={() => {
+                              if (window.confirm(`¿Suspender la cuenta de ${u.email}?`))
+                                suspender.mutate(u.id);
+                            }}
+                          >
+                            Suspender
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -262,6 +360,14 @@ export default function UsuariosPage() {
           )}
         </CardContent>
       </Card>
+      {editando && (
+        <EditarUsuario
+          usuario={editando}
+          guardando={reasignarRol.isPending}
+          onCancelar={() => setEditando(null)}
+          onGuardar={(r, a) => reasignarRol.mutate({ id: editando.id, rol: r, ambitos: a })}
+        />
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import type { EstadoAula, EstadoPuerta, Magnitud } from "@/lib/types";
 import { LIMA_OFFSET_MS, DIAS_SEMANA } from "@/lib/schedule";
-import { UNIDADES } from "@/lib/simulator/profiles";
+import { UNIDADES } from "@/lib/units";
 
 const DECIMALES: Partial<Record<Magnitud, number>> = {
   temperatura: 1,

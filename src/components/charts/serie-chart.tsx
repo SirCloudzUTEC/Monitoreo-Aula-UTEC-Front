@@ -19,7 +19,7 @@ import type { Magnitud, Umbrales } from "@/lib/types";
 import type { PuntoSerie } from "@/lib/use-serie";
 import { detectarAnomalias, type PuntoAnomalo } from "@/lib/anomaly/detector";
 import { horaCorta, fechaHoraCorta, formatearValor } from "@/lib/format";
-import { UNIDADES } from "@/lib/simulator/profiles";
+import { UNIDADES } from "@/lib/units";
 
 export interface LineaUmbral {
   valor: number;

@@ -1,3 +1,5 @@
+> **Histórico — anterior al corte al backend.** Este documento describe la fase con simulador en el navegador y Auth.js/Neon en Next.js, que ya no existen en el frontend. La arquitectura vigente está en `MIGRACION_FRONTEND_BACKEND.md` (§8 lista el estado real) y `BACKEND_SPRINGBOOT.md`.
+
 # Mapeo de requisitos SysML → implementación
 
 Tabla de trazabilidad: cada requisito del modelo SysML del curso y el archivo/componente

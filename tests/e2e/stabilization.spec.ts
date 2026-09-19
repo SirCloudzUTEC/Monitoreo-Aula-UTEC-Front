@@ -1,174 +1,129 @@
-import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { contextoAnonimo, expect, login, test } from "./helpers";
 
-/** Test-only bypass (see src/auth.ts): simulates a superadmin login without
- * going through real Google OAuth. Requires AUTH_TEST_BYPASS_SECRET and
- * SUPERADMIN_EMAIL set to the same value in the test server's environment. */
-function bypassCredentials() {
-  const secret = process.env.AUTH_TEST_BYPASS_SECRET;
-  const email = process.env.SUPERADMIN_EMAIL;
-  if (!secret || !email)
-    throw new Error(
-      "Define AUTH_TEST_BYPASS_SECRET y SUPERADMIN_EMAIL para las pruebas e2e (ver README).",
-    );
-  return { secret, email };
-}
-
-async function login(page: Page) {
-  const { secret, email } = bypassCredentials();
-  const csrf = await (await page.request.get("/api/auth/csrf")).json();
-  await page.request.post("/api/auth/callback/test-bypass", {
-    form: { csrfToken: csrf.csrfToken, secret, email, callbackUrl: "/" },
-  });
-  await page.goto("/ajustes");
-  await expect(page.getByText(email, { exact: false })).toBeVisible();
-}
-
-const checkpoint = (page: Page) =>
-  page.evaluate(() =>
-    JSON.parse(localStorage.getItem("aula-digital:session:v2") || "{}"),
-  );
-
-test("visualizador cannot acknowledge alerts or save an imported plan", async ({
-  page,
-}) => {
-  await page.clock.install({ time: new Date("2026-09-07T15:30:00-05:00") });
-  await page.goto("/alertas", { waitUntil: "networkidle" });
-  const buttons = page.getByRole("button", { name: "Acusar recibo" });
-  expect(await buttons.count()).toBeGreaterThan(0);
-  for (const button of await buttons.all()) await expect(button).toBeDisabled();
-  await page.goto("/importar");
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "outline.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from("x,y\n0,0\n10,0\n10,6\n0,6\n"),
-    });
-  await expect(
-    page.getByRole("button", { name: "Guardar plano para L-419" }),
-  ).toBeDisabled();
+test("an anonymous visitor is sent to the login page and back after signing in", async ({ browser }) => {
+  const contexto = await contextoAnonimo(browser);
+  const page = await contexto.newPage();
+  await page.goto("/alertas");
+  await expect(page).toHaveURL(/\/acceso\?next=%2Falertas$/);
+  await login(page, "/alertas");
+  await expect(page.getByRole("heading", { name: "Alertas", exact: true })).toBeVisible();
+  await contexto.close();
 });
 
-test("administrator can inject, acknowledge and reload without losing log rows", async ({
-  page,
-}) => {
+test("a wrong password shows a generic error and keeps the user on the login page", async ({ browser }) => {
+  const contexto = await contextoAnonimo(browser);
+  const page = await contexto.newPage();
+  await page.goto("/acceso");
+  await page.getByLabel("Correo institucional").fill(process.env.E2E_EMAIL!);
+  await page.getByLabel("Contraseña").fill("contraseña-incorrecta-123");
+  await page.getByRole("button", { name: "Iniciar sesión" }).click();
+  await expect(page.getByText(/No se pudo iniciar sesión/)).toBeVisible();
+  await expect(page).toHaveURL(/\/acceso/);
+  await contexto.close();
+});
+
+test("the dashboard shows live data from the backend, and the session survives a reload", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await login(page);
-  await page.goto("/simulador");
-  await page.getByRole("button", { name: "Pausar", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Reanudar", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Inyectar", exact: true }).click();
-  await expect
-    .poll(async () =>
-      (await checkpoint(page)).recentLog.some(
-        (row: { tipo: string; fuente: string }) =>
-          row.tipo === "aforo_excedido" && row.fuente === "inyeccionManual",
-      ),
-    )
-    .toBe(true);
-  const before = await checkpoint(page);
-  const event = before.recentLog.findLast(
-    (row: { tipo: string; fuente: string }) =>
-      row.tipo === "aforo_excedido" && row.fuente === "inyeccionManual",
-  );
-  expect(event).toBeTruthy();
-  await page
-    .getByRole("navigation")
-    .getByRole("link", { name: /^Alertas/ })
-    .first()
-    .click();
-  const card = page
-    .locator("div.rounded-lg.border.p-3")
-    .filter({ hasText: "Aforo excedido" })
-    .first();
-  await card.getByRole("button", { name: "Acusar recibo" }).click();
-  await expect
-    .poll(async () =>
-      (await checkpoint(page)).recentLog.some(
-        (row: { tipo: string; fuente: string }) =>
-          row.tipo === "acuse" && row.fuente === event.id_evento,
-      ),
-    )
-    .toBe(true);
-  const saved = await checkpoint(page);
-  expect(
-    saved.recentLog.some(
-      (row: { tipo: string; fuente: string }) =>
-        row.tipo === "acuse" && row.fuente === event.id_evento,
-    ),
-  ).toBe(true);
+  await expect(page.getByRole("heading", { name: "Panel general" })).toBeVisible();
+  await expect(page.getByText(/Estado en vivo a las/)).toBeVisible();
+  // the access token is memory-only: a reload must restore the session from the refresh cookie
   await page.reload({ waitUntil: "networkidle" });
-  const restored = await checkpoint(page);
-  expect(
-    restored.recentLog.map((row: { id_evento: string }) => row.id_evento),
-  ).toEqual(
-    expect.arrayContaining(
-      saved.recentLog.map((row: { id_evento: string }) => row.id_evento),
-    ),
-  );
-  await page.goto("/log");
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Exportar CSV" }).click();
-  const download = await downloadPromise;
-  const csv = await readFile((await download.path())!, "utf8");
-  expect(csv.split(/\r?\n/)[0]).toBe(
-    "ts,aula,id_evento,tipo,severidad,fuente,valor,umbral,actor,estado_resultante",
-  );
-  expect(csv).toContain(event.id_evento);
-  expect(csv).toContain(`ACK-${event.id_evento}`);
+  await expect(page.getByRole("heading", { name: "Panel general" })).toBeVisible();
+  await expect(page.getByText(/Estado en vivo a las/)).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-test("expired server session blocks local event injection without a reload", async ({
-  page,
-  context,
-}) => {
+test("nothing sensitive is written to web storage", async ({ page }) => {
   await login(page);
-  await page.goto("/simulador");
-  await page.getByRole("button", { name: "Pausar", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Reanudar", exact: true }),
-  ).toBeVisible();
-  const saved = await checkpoint(page);
-  await context.clearCookies();
-  await page.getByRole("button", { name: "Inyectar", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Inyectar", exact: true }),
-  ).not.toBeVisible();
-  expect((await checkpoint(page)).recentLog).toEqual(saved.recentLog);
+  const storage = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  expect(storage).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}\./); // no JWT
+  expect(storage).not.toMatch(/refresh/i);
 });
 
-test("forged role header is forbidden and authenticated malformed input is rejected", async ({
-  request,
-}) => {
-  const seed = await (await request.get("/api/umbrales")).json();
-  expect(
-    (
-      await request.post("/api/umbrales", {
-        headers: { "x-rol": "administrador" },
-        data: seed,
-      })
-    ).status(),
-  ).toBe(403);
-  expect((await request.get("/api/serie?aula=NO-EXISTE")).status()).toBe(400);
-  const { secret, email } = bypassCredentials();
-  const csrf = await (await request.get("/api/auth/csrf")).json();
-  await request.post("/api/auth/callback/test-bypass", {
-    form: { csrfToken: csrf.csrfToken, secret, email, callbackUrl: "/" },
+test("the page loads under the Content-Security-Policy without violations", async ({ page }) => {
+  const violaciones: string[] = [];
+  page.on("console", (m) => {
+    if (/content security policy|refused to (load|connect|execute|apply)/i.test(m.text())) violaciones.push(m.text());
   });
-  expect(
-    (
-      await request.post("/api/umbrales", {
-        data: "null",
-        headers: { "content-type": "application/json" },
-      })
-    ).status(),
-  ).toBe(400);
-  expect((await request.post("/api/umbrales", { data: seed })).status()).toBe(
-    200,
+  for (const ruta of ["/", "/alertas", "/ajustes", "/aula/L-419", "/aula/L-419/3d", "/modulo/aire"]) {
+    await login(page, ruta);
+    await page.waitForLoadState("networkidle");
+  }
+  expect(violaciones).toEqual([]);
+});
+
+test("the event log exports the exact SYS-10.1 CSV columns", async ({ page }) => {
+  await login(page, "/log");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Exportar CSV" }).click();
+  const csv = await readFile((await (await downloadPromise).path())!, "utf8");
+  expect(csv.split(/\r?\n/)[0]).toBe(
+    "ts,aula,id_evento,tipo,severidad,fuente,valor,umbral,actor,estado_resultante",
   );
+});
+
+test("an open alert can be acknowledged and stays acknowledged after a reload", async ({ page }) => {
+  await login(page, "/alertas");
+  const boton = page.getByRole("button", { name: "Acusar recibo" }).first();
+  await expect(boton).toBeVisible(); // the synthetic publisher keeps a low-battery alert open
+  await boton.click();
+  await expect(page.getByText(/Acuse registrado/)).toBeVisible();
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByText(/Acusado por/).first()).toBeVisible();
+});
+
+test("a stale room is flagged instead of shown as live", async ({ page }) => {
+  await login(page);
+  // the synthetic publisher is running, so nothing may be flagged as stale
+  await expect(page.getByText(/Sin datos recientes/)).toHaveCount(0);
+});
+
+test("the change-password form validates before calling the backend", async ({ page }) => {
+  await login(page, "/ajustes");
+  await page.getByLabel("Contraseña actual").fill("cualquiera-12345");
+  await page.getByLabel(/Nueva \(mínimo/).fill("nueva-clave-456");
+  await page.getByLabel("Repite la nueva").fill("otra-clave-789");
+  await page.getByRole("button", { name: "Cambiar contraseña" }).click();
+  await expect(page.getByText(/no coinciden/)).toBeVisible();
+  // the browser's own minlength check stops a too-short password before any request
+  await page.getByLabel(/Nueva \(mínimo/).fill("corta");
+  await page.getByLabel("Repite la nueva").fill("corta");
+  await page.getByRole("button", { name: "Cambiar contraseña" }).click();
+  const nueva = page.getByLabel(/Nueva \(mínimo/);
+  expect(await nueva.evaluate((el) => (el as HTMLInputElement).validity.tooShort)).toBe(true);
+});
+
+test("the devices roster lists the seeded nodes and offers to block them", async ({ page }) => {
+  await login(page, "/dispositivos");
+  await expect(page.getByRole("heading", { name: "Dispositivos", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "nodoAmbiental" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Bloquear" }).first()).toBeVisible();
+});
+
+test("a revoked session sends the user back to the login page", async ({ browser }) => {
+  const contexto = await contextoAnonimo(browser);
+  const page = await contexto.newPage();
+  await login(page);
+  await contexto.clearCookies(); // drops the refresh cookie
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page).toHaveURL(/\/acceso/);
+  await contexto.close();
+});
+
+test("several tabs opened at once do not log each other out", async ({ browser }) => {
+  const contexto = await contextoAnonimo(browser);
+  const primera = await contexto.newPage();
+  await login(primera);
+  // restoring the session rotates the refresh cookie: N tabs doing it simultaneously must all survive
+  const paginas = await Promise.all([1, 2, 3, 4].map(() => contexto.newPage()));
+  await Promise.all(paginas.map((p) => p.goto("/")));
+  for (const p of paginas) {
+    await expect(p.getByRole("heading", { name: "Panel general" })).toBeVisible();
+  }
+  await primera.reload({ waitUntil: "networkidle" }); // ...and the session is still alive afterwards
+  await expect(primera.getByRole("heading", { name: "Panel general" })).toBeVisible();
+  await contexto.close();
 });

@@ -38,6 +38,7 @@ export interface Medicion {
 }
 
 export type Severidad = "info" | "alerta" | "critico";
+export const SEVERIDADES = ["info", "alerta", "critico"] as const satisfies readonly Severidad[];
 
 export type TipoEvento =
   // nominal (info)
@@ -160,27 +161,6 @@ export interface BloqueHorario {
 }
 
 export type Horario = Record<AulaCodigo, BloqueHorario[]>;
-
-export type Escenario =
-  | "clase_normal"
-  | "aula_libre"
-  | "aforo_excedido"
-  | "puerta_trabada"
-  | "co2_alto"
-  | "intruso_ventana"
-  | "nodo_caido";
-
-export type Velocidad = 1 | 10 | 60;
-
-export interface EstadoSimulacion {
-  escenarios: Record<AulaCodigo, Escenario>;
-  velocidad: Velocidad;
-  /** wall-clock ms at which the sim clock was anchored */
-  anclaRealMs: number;
-  /** sim-clock ms at the anchor */
-  anclaSimMs: number;
-  corriendo: boolean;
-}
 
 /** Dashboard module domains (F1). */
 export type ModuloId =

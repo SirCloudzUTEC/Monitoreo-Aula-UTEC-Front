@@ -24,8 +24,8 @@ import {
   type ResultadoImport,
 } from "@/lib/plano/import";
 import { descargarArchivo, saveLocal } from "@/lib/data/storage";
-import { getAula } from "@/lib/simulator/profiles";
-import { CODIGOS_AULA, useApp } from "@/lib/store";
+import { CODIGOS_AULA, getAula } from "@/lib/aulas";
+import { useApp } from "@/lib/store";
 import { puede } from "@/lib/auth/identity";
 import { useOnline } from "@/lib/use-online";
 import type { AulaCodigo } from "@/lib/types";

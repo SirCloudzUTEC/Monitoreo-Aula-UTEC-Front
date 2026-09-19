@@ -17,9 +17,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PlanoSvg, type PlanoImportado } from "@/components/plano/plano-svg";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { CODIGOS_AULA, getAula } from "@/lib/aulas";
+import { AvisoObsoleto } from "@/components/modules/aviso-obsoleto";
+import { useEstados } from "@/lib/api/hooks";
 import { loadLocal } from "@/lib/data/storage";
-import { getAula } from "@/lib/simulator/profiles";
 import { CLASE_ESTADO, ETIQUETA_ESTADO, formatearValor } from "@/lib/format";
 import blocks from "@/data/blocks.json";
 import type { AulaCodigo, NodoSpec, SensorSpec } from "@/lib/types";
@@ -32,8 +33,9 @@ export default function AulaPage() {
   const params = useParams<{ codigo: string }>();
   const codigo = decodeURIComponent(params.codigo) as AulaCodigo;
   const valido = CODIGOS_AULA.includes(codigo);
-  const estado = useApp((s) => (valido ? s.estados[codigo] : "Cerrada"));
-  const valores = useApp((s) => (valido ? s.valores[codigo] : undefined));
+  const { estados, valores: todos, antiguedadMs } = useEstados();
+  const estado = valido ? estados[codigo] : "Cerrada";
+  const valores = valido ? todos[codigo] : undefined;
   const [plano, setPlano] = useState<PlanoImportado | null>(null);
 
   useEffect(() => {
@@ -112,6 +114,9 @@ export default function AulaPage() {
           <CardTitle className="text-xl">Lecturas actuales</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {valido && (
+            <AvisoObsoleto antiguedadMs={antiguedadMs[codigo]} className="col-span-2 sm:col-span-4" />
+          )}
           {(["temperatura", "humedad", "co2", "pm25", "lux", "ruido", "ocupacion", "puerta"] as const).map(
             (m) => (
               <div key={m} className="rounded-lg bg-muted/50 p-3 text-center">

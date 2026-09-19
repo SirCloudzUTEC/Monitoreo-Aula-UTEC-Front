@@ -7,13 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
 import { useApp, estaEscalado } from "@/lib/store";
+import { useAcusar, useEstados } from "@/lib/api/hooks";
 import { puede } from "@/lib/auth/identity";
 import { fechaHoraDeIso } from "@/lib/format";
 import type { Evento, Severidad } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useOnline } from "@/lib/use-online";
 
-const CLASE_SEVERIDAD: Record<Severidad, string> = {
+export const CLASE_SEVERIDAD: Record<Severidad, string> = {
   info: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
   alerta: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   critico: "bg-red-600 text-white",
@@ -32,11 +33,11 @@ export function EventoCard({
   evento: Evento;
   abierta?: boolean;
 }) {
-  const acusar = useApp((s) => s.acusar);
+  const acusar = useAcusar();
   const cuenta = useApp((s) => s.cuenta);
   const canWrite = cuenta ? puede(cuenta, "atender_incidentes") : false;
   const online = useOnline();
-  const simNowMs = useApp((s) => s.simNowMs);
+  const { nowMs: simNowMs } = useEstados();
   const cat = CATALOGO_EVENTOS[evento.tipo];
   const escalado = abierta && estaEscalado(evento, simNowMs);
 
@@ -95,8 +96,8 @@ export function EventoCard({
             <>
               <Button
                 size="sm"
-                disabled={!canWrite || !online}
-                onClick={() => acusar(evento.aula, evento.id_evento)}
+                disabled={!canWrite || !online || acusar.isPending}
+                onClick={() => acusar.mutate(evento.id_evento)}
               >
                 Acusar recibo
               </Button>

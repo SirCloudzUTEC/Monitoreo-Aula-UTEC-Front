@@ -73,6 +73,8 @@ export const useApp = create<AppState>((set, get) => {
           cache: "no-store",
           signal: AbortSignal.timeout(5000),
         });
+        // read the body so the connection is released now, not when the abort timer fires
+        await response.text().catch(() => "");
         if (!response.ok) throw new Error("Server unavailable");
         if (version !== conexionVersion) return false;
         set({ connected: true });

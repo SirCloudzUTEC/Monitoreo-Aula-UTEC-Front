@@ -33,13 +33,13 @@ El acceso es por cuenta real, restringida a `@utec.edu.pe`; no hay PIN compartid
 Cómo viaja la sesión:
 
 - El **access token** (JWT, 15 min) vive solo en memoria de la pestaña: nunca en `localStorage` ni `sessionStorage`. Cada request lo envía como `Authorization: Bearer`.
-- El **refresh token** es una cookie `httpOnly` que setea el backend; JavaScript nunca la lee. Al cargar la página, o ante un 401, el cliente (`src/lib/api/client.ts`) hace exactamente un `POST /api/auth/refresh` silencioso y reintenta.
+- El **refresh token** es una cookie `httpOnly` que setea el backend; JavaScript nunca la lee. Al cargar la página, o ante un 401, el cliente (`src/lib/api/client.ts`) hace exactamente un `POST /api/auth/refresh` silencioso y reintenta. El refresh se serializa entre pestañas con Web Locks (y el backend tolera 30 s de reuso de un token recién rotado), para que abrir varias pestañas a la vez no cierre la sesión.
 - Suspender a una cuenta o cambiarle el rol invalida sus tokens de inmediato (`token_version`); el siguiente request devuelve 401 y el usuario vuelve a `/acceso`.
 
 Roles, de menor a mayor alcance (el frontend solo los usa para ocultar controles; el backend autoriza cada request):
 
 - **miembro** — solo visualización, reportar incidentes y recibir alertas.
-- **admin_operativo** — además, atender incidentes y editar umbrales y horario.
+- **admin_operativo** — además, atender incidentes (solo los de sus **ámbitos**: seguridad, mantenimiento, TI, bienestar; sin ámbito no ve ninguno, por eso al crearlo se exige al menos uno), editar umbrales y horario y gestionar dispositivos.
 - **superadmin** — todo lo anterior, más crear cuentas, cambiar roles, suspender y restablecer contraseñas desde `/usuarios`.
 - Una cuenta `pendiente` o `suspendida` no tiene permisos: ve un aviso y ningún dato.
 
@@ -86,8 +86,9 @@ Las trazas y capturas de fallos pueden contener datos de la sesión de prueba: p
 | `/importar`        | Contorno CSV, DXF o JSON con vista previa             |
 | `/reportar`        | Reportar un incidente (categoría, ubicación, descripción) |
 | `/reportes`        | Ver reportes: propios, o todos con `atender_incidentes` (atender/resolver) |
-| `/usuarios`        | Crear cuentas, cambiar rol, suspender (solo superusuario) |
-| `/ajustes`         | Sesión, umbrales, horario, contactos y notificaciones |
+| `/usuarios`        | Crear cuentas, editar rol y ámbitos, suspender/reactivar, nueva contraseña (solo superusuario) |
+| `/dispositivos`    | Nodos MQTT: alta con credencial (se muestra una vez), rotar, bloquear/activar (`gestionar_dispositivos`) |
+| `/ajustes`         | Sesión, cambio de contraseña, umbrales, horario, contactos y notificaciones |
 
 Se conservan redirecciones desde `/dashboard`, `/configuracion`, `/footprint`, `/aulas/:aulaId` y `/login`.
 
@@ -97,8 +98,14 @@ Las lecturas y el estado de cada aula se consultan cada 5 s (`GET /api/aulas/{co
 
 - Solo quedan en el navegador (localStorage) conveniencias por equipo: preferencia de sonido, aulas elegidas del panel, plano importado en `/importar` y contactos de notificación (aún sin endpoint en el backend).
 - La PWA guarda documentos y recursos visitados; evita mezclar HTML y respuestas de la API. **Abre las pantallas con conexión antes de depender de ellas offline.**
-- Un sondeo de `GET /actuator/health` del backend detecta desconexión: la app pasa a solo lectura y se recupera sola al volver la conexión. No hay escrituras offline. La comprobación periódica puede tardar hasta 30 segundos más el timeout de cinco segundos si el navegador no emite un evento offline.
+- Un sondeo de `GET /actuator/health/liveness` del backend (no toca su base de datos) detecta desconexión: la app pasa a solo lectura y se recupera sola al volver la conexión. No hay escrituras offline. La comprobación periódica puede tardar hasta 30 segundos más el timeout de cinco segundos si el navegador no emite un evento offline.
 - Las alertas críticas llegan por notificación push desde el backend aunque la app esté cerrada; dentro de la app además salen como toast (y sonido, si está activado).
+
+## Seguridad del navegador
+
+`next.config.ts` sirve una Content-Security-Policy (`connect-src` limitada a este origen y al backend de `NEXT_PUBLIC_API_BASE_URL`, sin objetos ni frames), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` y HSTS. Como el access token vive en memoria, la CSP limita a dónde podría enviarlo un script inyectado. `script-src` conserva `'unsafe-inline'` porque Next.js lo necesita para hidratar (una política con nonce exigiría un middleware dinámico); `'unsafe-eval'` y los websockets solo se permiten en desarrollo. Si añades un servicio externo (analítica, mapas, fuentes remotas), habilítalo explícitamente en esa política.
+
+`NEXT_PUBLIC_API_BASE_URL` es obligatoria en producción: el build falla si falta, en vez de compilar una app que hablaría con el `localhost` del visitante. `npm run setup:local` avisa si `.env.local` aún trae variables de la arquitectura anterior (`DATABASE_URL`, `AUTH_SECRET`, claves de Google, `VAPID_PRIVATE_KEY`…).
 
 ## Preparar un despliegue en Vercel
 

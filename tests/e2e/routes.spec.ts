@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { contextoAnonimo, expect, login, test } from "./helpers";
 
 for (const path of [
   "/",
@@ -52,10 +51,13 @@ for (const path of ["/", "/aula/L-419", "/ajustes"]) {
   });
 }
 
-test("the login page loads without JavaScript errors", async ({ page }) => {
+test("the login page loads without JavaScript errors", async ({ browser }) => {
+  const contexto = await contextoAnonimo(browser);
+  const page = await contexto.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/acceso", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(errors).toEqual([]);
+  await contexto.close();
 });

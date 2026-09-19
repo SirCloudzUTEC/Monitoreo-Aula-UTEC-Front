@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { expect, login, test } from "./helpers";
 
 test("settings hydrates without a server/browser capability mismatch", async ({ page }) => {
   const errors: string[] = [];

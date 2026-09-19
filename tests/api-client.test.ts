@@ -68,6 +68,27 @@ describe("api client", () => {
     expect(getAccessToken()).toBe("nuevo");
   });
 
+  it("releases a rejected refresh response (an unread body keeps the request open)", async () => {
+    setAccessToken("viejo");
+    const rechazoRefresh = json(401, { detail: "Sesión inválida." });
+    const cancela = vi.spyOn(rechazoRefresh.body!, "cancel");
+    fetchMock.mockResolvedValueOnce(json(401, {})).mockResolvedValueOnce(rechazoRefresh);
+    await expect(api("/api/horario")).rejects.toMatchObject({ status: 401 });
+    expect(cancela).toHaveBeenCalled();
+  });
+
+  it("releases the original 401 when the request is retried after a refresh", async () => {
+    setAccessToken("viejo");
+    const original = json(401, {});
+    const cancela = vi.spyOn(original.body!, "cancel");
+    fetchMock
+      .mockResolvedValueOnce(original)
+      .mockResolvedValueOnce(json(200, { accessToken: "nuevo" }))
+      .mockResolvedValueOnce(json(200, { ok: 1 }));
+    await api("/api/horario");
+    expect(cancela).toHaveBeenCalled();
+  });
+
   it("shares a single refresh between concurrent 401s", async () => {
     setAccessToken("viejo");
     let refrescos = 0;

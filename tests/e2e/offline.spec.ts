@@ -1,10 +1,9 @@
-import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { expect, login, test } from "./helpers";
 
 test("losing the connection switches the app to read-only and recovers on reconnect", async ({
   page,
-  context,
 }) => {
+  const context = page.context(); // the shared, signed-in context (not the default `context` fixture)
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await login(page);

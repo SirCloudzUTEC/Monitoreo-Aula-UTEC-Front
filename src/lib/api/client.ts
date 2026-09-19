@@ -116,10 +116,16 @@ async function enviar(path: string, o: Opciones): Promise<Response> {
 type ResultadoRefresh = "ok" | "expirada" | "sin_conexion";
 let refrescando: Promise<ResultadoRefresh> | null = null;
 
+/** Releases a response we are not going to read; an unread body keeps the request (and its connection) open. */
+async function soltar(res: Response): Promise<void> {
+  await res.body?.cancel().catch(() => {});
+}
+
 async function refrescar(): Promise<ResultadoRefresh> {
   try {
     const res = await enviar("/api/auth/refresh", { method: "POST", publico: true });
     if (!res.ok) {
+      await soltar(res);
       setAccessToken(null);
       return "expirada";
     }
@@ -153,7 +159,10 @@ export async function api<T = void>(path: string, o: Opciones = {}): Promise<T> 
   let res = await enviar(path, o);
   if (res.status === 401 && !o.publico) {
     const r = await refrescarSesion();
-    if (r === "ok") res = await enviar(path, o);
+    if (r === "ok") {
+      await soltar(res); // the 401 is replaced by the retried response
+      res = await enviar(path, o);
+    }
     else if (r === "expirada") alPerderSesion?.();
   }
   if (!res.ok) throw await problema(res);

@@ -13,9 +13,9 @@ import { SerieChart, lineasUmbral } from "@/components/charts/serie-chart";
 import { EventoCard } from "@/components/events/evento-card";
 import { ModuleIcon } from "@/components/modules/module-icon";
 import { MODULOS, esModuloId, eventosDeModulo } from "@/lib/modules";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
-import { useSerie } from "@/lib/use-serie";
-import { getAula } from "@/lib/simulator/profiles";
+import { CODIGOS_AULA, getAula } from "@/lib/aulas";
+import { useEventosAbiertos, useUmbrales } from "@/lib/api/hooks";
+import { SIN_SERIE, useSerie } from "@/lib/use-serie";
 import { ETIQUETA_MAGNITUD } from "@/lib/format";
 import type { AulaCodigo, Magnitud, ModuloId } from "@/lib/types";
 
@@ -36,17 +36,24 @@ function ChartAula({
   magnitud: Magnitud;
   rango: RangoId;
 }) {
-  const umbrales = useApp((s) => s.umbrales);
+  const { umbrales } = useUmbrales();
   const r = RANGOS[rango];
   const serie = useSerie(aula, magnitud, r.minutos, r.pasoMin);
+  if (SIN_SERIE.includes(magnitud))
+    return (
+      <p className="text-sm text-muted-foreground">
+        La puerta es un estado (abierta/cerrada/asegurada), no una serie numérica: sus cambios
+        quedan en el log de eventos.
+      </p>
+    );
   return <SerieChart data={serie} magnitud={magnitud} umbrales={umbrales} />;
 }
 
 export default function ModuloPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const abiertos = useApp((s) => s.abiertos);
-  const umbrales = useApp((s) => s.umbrales);
+  const { abiertos } = useEventosAbiertos();
+  const { umbrales } = useUmbrales();
   const [rango, setRango] = useState<RangoId>("1h");
 
   if (!esModuloId(params.id)) notFound();

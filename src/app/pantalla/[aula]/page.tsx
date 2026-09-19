@@ -1,12 +1,12 @@
 "use client";
 
 // F3 — classroom TV view (24" screen, readable at 3 m): huge values,
-// refreshed every 5 s by the sim clock, full-width red banner on critical.
+// refreshed every 5 s from the backend, full-width red banner on critical.
 
 import { notFound, useParams } from "next/navigation";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { CODIGOS_AULA, getAula } from "@/lib/aulas";
+import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
 import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
-import { getAula } from "@/lib/simulator/profiles";
 import { bloqueEnCurso, minutosRestantes, proximoBloque, DIAS_SEMANA } from "@/lib/schedule";
 import { ETIQUETA_ESTADO, formatearValor, horaCorta } from "@/lib/format";
 import type { AulaCodigo, EstadoAula, EstadoPuerta, Magnitud, Umbrales } from "@/lib/types";
@@ -24,9 +24,10 @@ interface MetricaConfig {
   etiqueta: string;
   /** cuándo se pinta en rojo */
   enAlerta: (valor: number | EstadoPuerta | undefined, umbrales: Umbrales) => boolean;
-  /** texto del botón verde; si no hay, esa medida no se puede "arreglar" desde la pantalla */
+  /** acción recomendada que se muestra cuando la medida está en alerta */
   accion?: string;
 }
+
 
 const METRICAS: MetricaConfig[] = [
   {
@@ -70,13 +71,13 @@ const METRICAS: MetricaConfig[] = [
 export default function PantallaPage() {
   const params = useParams<{ aula: string }>();
   const aula = params.aula as AulaCodigo;
-  const valores = useApp((s) => (CODIGOS_AULA.includes(aula) ? s.valores[aula] : undefined));
-  const estado = useApp((s) => (CODIGOS_AULA.includes(aula) ? s.estados[aula] : "Cerrada"));
-  const abiertos = useApp((s) => s.abiertos);
-  const horario = useApp((s) => s.horario);
-  const umbrales = useApp((s) => s.umbrales);
-  const corregirAula = useApp((s) => s.corregirAula);
-  const simNowMs = useApp((s) => s.simNowMs);
+  const { estados, valores: todos, nowMs: simNowMs } = useEstados();
+  const valido = CODIGOS_AULA.includes(aula);
+  const valores = valido ? todos[aula] : undefined;
+  const estado = valido ? estados[aula] : "Cerrada";
+  const { abiertos } = useEventosAbiertos();
+  const { horario } = useHorario();
+  const { umbrales } = useUmbrales();
 
   if (!CODIGOS_AULA.includes(aula)) notFound();
   const spec = getAula(aula);
@@ -173,13 +174,9 @@ export default function PantallaPage() {
                 {formatearValor(m.magnitud, valor)}
               </div>
               {alerta && m.accion && (
-                <button
-                  type="button"
-                  onClick={() => corregirAula(aula)}
-                  className="mt-1 rounded-full border border-white px-4 py-1.5 text-[18px] font-semibold text-white transition-colors hover:bg-white hover:text-black"
-                >
+                <div className="mt-1 rounded-full border border-white/70 px-4 py-1.5 text-[18px] font-semibold text-white">
                   {m.accion}
-                </button>
+                </div>
               )}
             </div>
           );

@@ -1,11 +1,13 @@
 "use client";
 
-// Admin-only user management. There is no self-registration anymore: a
-// superusuario is the only one who can create an account, and does so by
-// picking the new account's email and role — the server generates the
-// password and returns it once so it can be handed to that person.
+// Admin-only user management. There is no self-registration: a superusuario
+// is the only one who can create an account, and does so by picking the new
+// account's email and role — the backend generates the password and returns it
+// once so it can be handed to that person. Existing accounts can be suspended,
+// re-roled or given a fresh password (all of which revoke their sessions).
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { UserPlusIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +31,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
+import { useHabilitado } from "@/lib/api/hooks";
+import {
+  cambiarRol,
+  crearUsuario,
+  listarUsuarios,
+  restablecerPassword,
+  suspenderUsuario,
+} from "@/lib/api/endpoints";
+import { mensajeDeError } from "@/lib/api/client";
 import { puede, type Rol } from "@/lib/auth/identity";
 
 const ETIQUETA_ROL: Record<Rol, string> = {
@@ -37,68 +48,66 @@ const ETIQUETA_ROL: Record<Rol, string> = {
   superadmin: "Superusuario (gestión de usuarios)",
 };
 
-interface UsuarioFila {
-  email: string;
-  nombre: string;
-  rol: Rol;
-  estado: string;
-  creado_en: string;
-}
-
 export default function UsuariosPage() {
   const cuenta = useApp((s) => s.cuenta);
   const autorizado = cuenta ? puede(cuenta, "gestionar_usuarios") : false;
+  const habilitado = useHabilitado("gestionar_usuarios");
+  const qc = useQueryClient();
 
-  const [usuarios, setUsuarios] = useState<UsuarioFila[]>([]);
-  const [cargando, setCargando] = useState(true);
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<Rol>("miembro");
-  const [enviando, setEnviando] = useState(false);
   const [creada, setCreada] = useState<{ email: string; password: string } | null>(
     null,
   );
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    const res = await fetch("/api/usuarios").catch(() => null);
-    const data = (await res?.json().catch(() => null)) as
-      | { usuarios?: UsuarioFila[] }
-      | null;
-    setUsuarios(data?.usuarios ?? []);
-    setCargando(false);
-  }, []);
+  const lista = useQuery({
+    queryKey: ["usuarios"],
+    queryFn: listarUsuarios,
+    enabled: habilitado,
+  });
+  const usuarios = lista.data ?? [];
+  const cargando = lista.isPending && habilitado;
+  const refrescar = () => qc.invalidateQueries({ queryKey: ["usuarios"] });
+  const alFallar = (e: unknown) => toast.error(mensajeDeError(e, "No se pudo completar la acción."));
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (autorizado) void cargar();
-  }, [autorizado, cargar]);
+  const crear = useMutation({
+    mutationFn: crearUsuario,
+    onSuccess: (r) => {
+      setCreada(r);
+      setNombre("");
+      setEmail("");
+      setRol("miembro");
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const suspender = useMutation({
+    mutationFn: suspenderUsuario,
+    onSuccess: () => {
+      toast.success("Cuenta suspendida; sus sesiones quedaron revocadas.");
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const reasignarRol = useMutation({
+    mutationFn: (v: { id: number; rol: Rol }) => cambiarRol(v.id, v.rol),
+    onSuccess: () => {
+      toast.success("Rol actualizado.");
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const nuevaClave = useMutation({
+    mutationFn: restablecerPassword,
+    onSuccess: (r) => setCreada(r),
+    onError: alFallar,
+  });
 
-  const crear = async (e: React.FormEvent) => {
+  const enviando = crear.isPending;
+  const enviar = (e: React.FormEvent) => {
     e.preventDefault();
-    setEnviando(true);
-    const res = await fetch("/api/usuarios", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: nombre.trim(), email: email.trim().toLowerCase(), rol }),
-    }).catch(() => null);
-    setEnviando(false);
-    if (!res) {
-      toast.error("Sin conexión: no se creó la cuenta.");
-      return;
-    }
-    const data = (await res.json().catch(() => null)) as
-      | { ok?: boolean; email?: string; password?: string; error?: string }
-      | null;
-    if (!res.ok || !data?.ok || !data.password) {
-      toast.error(data?.error ?? "No se pudo crear la cuenta.");
-      return;
-    }
-    setCreada({ email: data.email ?? email, password: data.password });
-    setNombre("");
-    setEmail("");
-    setRol("miembro");
-    void cargar();
+    crear.mutate({ nombre: nombre.trim(), email: email.trim().toLowerCase(), rol });
   };
 
   const copiar = async (texto: string) => {
@@ -147,8 +156,8 @@ export default function UsuariosPage() {
           {creada && (
             <div className="space-y-2 rounded-md border border-emerald-300/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-950/40 dark:text-emerald-200">
               <p>
-                Cuenta creada para <strong>{creada.email}</strong>. Entrégale esta
-                contraseña por un canal seguro; no se volverá a mostrar.
+                Contraseña de <strong>{creada.email}</strong>. Entrégala por un canal
+                seguro; no se volverá a mostrar.
               </p>
               <div className="flex items-center gap-2">
                 <code className="rounded bg-background/60 px-2 py-1 font-mono text-sm">
@@ -173,7 +182,7 @@ export default function UsuariosPage() {
               </div>
             </div>
           )}
-          <form onSubmit={crear} className="grid gap-3 sm:grid-cols-2">
+          <form onSubmit={enviar} className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <Label htmlFor="nuevo-nombre" className="text-xs text-muted-foreground">
                 Nombre completo
@@ -243,17 +252,63 @@ export default function UsuariosPage() {
                   <TableHead>Rol</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Creada</TableHead>
+                  <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {usuarios.map((u) => (
-                  <TableRow key={u.email}>
+                  <TableRow key={u.id}>
                     <TableCell className="font-mono text-xs">{u.email}</TableCell>
                     <TableCell>{u.nombre || "—"}</TableCell>
-                    <TableCell>{ETIQUETA_ROL[u.rol] ?? u.rol}</TableCell>
+                    <TableCell>
+                      <Select
+                        value={u.rol}
+                        disabled={u.email === cuenta?.email || reasignarRol.isPending}
+                        onValueChange={(v) => reasignarRol.mutate({ id: u.id, rol: v as Rol })}
+                      >
+                        <SelectTrigger className="w-56" aria-label={`Rol de ${u.email}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(ETIQUETA_ROL) as Rol[]).map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {ETIQUETA_ROL[r]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell className="capitalize">{u.estado}</TableCell>
                     <TableCell>
-                      {new Date(u.creado_en).toLocaleDateString("es-PE")}
+                      {new Date(u.creadoEn).toLocaleDateString("es-PE")}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={nuevaClave.isPending}
+                          onClick={() => {
+                            if (window.confirm(`¿Generar una nueva contraseña para ${u.email}? Se cerrarán sus sesiones.`))
+                              nuevaClave.mutate(u.id);
+                          }}
+                        >
+                          Nueva contraseña
+                        </Button>
+                        {u.estado !== "suspendida" && u.email !== cuenta?.email && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={suspender.isPending}
+                            onClick={() => {
+                              if (window.confirm(`¿Suspender la cuenta de ${u.email}?`))
+                                suspender.mutate(u.id);
+                            }}
+                          >
+                            Suspender
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

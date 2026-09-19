@@ -8,7 +8,9 @@ import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { AulaSummaryCard } from "@/components/modules/aula-summary-card";
 import { ModuleCard } from "@/components/modules/module-card";
 import { ORDEN_MODULOS, riesgoAula } from "@/lib/modules";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { useApp } from "@/lib/store";
+import { CODIGOS_AULA } from "@/lib/aulas";
+import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
 import { horaLarga } from "@/lib/format";
 import { claseEnCurso } from "@/lib/schedule";
 import type { AulaCodigo } from "@/lib/types";
@@ -17,12 +19,10 @@ import { cn } from "@/lib/utils";
 const MAX_AULAS_VISIBLES = 4;
 
 export default function DashboardPage() {
-  const abiertos = useApp((s) => s.abiertos);
-  const estados = useApp((s) => s.estados);
-  const simNowMs = useApp((s) => s.simNowMs);
-  const valores = useApp((s) => s.valores);
-  const umbrales = useApp((s) => s.umbrales);
-  const horario = useApp((s) => s.horario);
+  const { abiertos } = useEventosAbiertos();
+  const { estados, valores, nowMs: simNowMs, listo } = useEstados();
+  const { umbrales } = useUmbrales();
+  const { horario } = useHorario();
   const prefsAulas = useApp((s) => s.prefsAulas);
   const [expandido, setExpandido] = useState(false);
 
@@ -57,7 +57,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Panel general</h1>
         <p className="text-base text-muted-foreground">
-          {simNowMs ? `Estado en vivo a las ${horaLarga(simNowMs)}` : "Cargando estado en vivo…"} ·{" "}
+          {listo && simNowMs ? `Estado en vivo a las ${horaLarga(simNowMs)}` : "Cargando estado en vivo…"} ·{" "}
           {aulasLibres} de {CODIGOS_AULA.length} aulas libres ·{" "}
           {sinAcuse > 0 ? (
             <span className="font-medium text-red-600">

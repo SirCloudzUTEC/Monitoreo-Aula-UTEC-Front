@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { AulaSummaryCard } from "@/components/modules/aula-summary-card";
-import { CODIGOS_AULA } from "@/lib/store";
+import { CODIGOS_AULA } from "@/lib/aulas";
 
 export default function TodasLasAulasPage() {
   return (

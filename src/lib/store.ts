@@ -1,25 +1,17 @@
 "use client";
 
-// Global app state (Zustand). Owns the simulated clock, feeds the rule engine
-// tick by tick, accumulates the event log and fires notifications. The engine
-// itself lives outside React state: it is mutable and never rendered directly.
+// Global client state (Zustand). Since the backend owns the data, this store
+// only keeps what has no server-side home: the signed-in account (filled by
+// the auth bootstrap in src/components/providers.tsx) and pure UI preferences.
+// Live readings, events, thresholds and schedule are react-query hooks in
+// src/lib/api/hooks.ts.
 
 import { create } from "zustand";
-import { toast } from "sonner";
-import type {
-  Aula,
-  AulaCodigo,
-  Escenario,
-  EstadoAula,
-  EstadoPuerta,
-  Evento,
-  Horario,
-  Magnitud,
-  TipoEvento,
-  Umbrales,
-  Velocidad,
-} from "@/lib/types";
+import { API_BASE_URL } from "@/lib/api/client";
+import { yo } from "@/lib/api/endpoints";
 import { puede, type CuentaUsuario, type Permiso } from "@/lib/auth/identity";
+import { loadLocal, saveLocal } from "@/lib/data/storage";
+import type { AulaCodigo, Evento } from "@/lib/types";
 
 export type ModoVisualizacionAulas = "representativas" | "manual";
 export interface PrefsAulas {
@@ -28,419 +20,76 @@ export interface PrefsAulas {
 }
 const PREFS_AULAS_DEFAULT: PrefsAulas = { modo: "representativas", seleccion: [] };
 
-import {
-  RuleEngine,
-  type EngineEmit,
-  type EngineSnapshot,
-} from "@/lib/rules/engine";
-import { HORARIO_DEFAULT } from "@/lib/schedule";
-import {
-  SimulatedDataSource,
-  TICK_MS,
-  type DataSource,
-  type ScenarioTransition,
-} from "@/lib/data/data-source";
-import { aplicarRetencion, type LogRow } from "@/lib/events/log";
-import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
-import {
-  cargarLogRows,
-  guardarLogRows,
-  loadLocal,
-  saveLocal,
-} from "@/lib/data/storage";
-import { notificarTodos } from "@/lib/notify/channels";
-import { isoLima } from "@/lib/simulator/generator";
-import aulasSeed from "@/data/aulas.json";
-import umbralesSeed from "@/data/umbrales.json";
-
-export const AULAS = aulasSeed as Aula[];
-export const CODIGOS_AULA = AULAS.map((a) => a.codigo);
-
-const WARMUP_MIN = 30; // simulate the last 30 min on load so the app never opens empty
-const MAX_BUCKETS_POR_TICK = 1000; // safety valve at 60x
-
-type Valores = Partial<Record<Magnitud, number | EstadoPuerta>>;
-
-interface SessionCheckpoint {
-  version: 1;
-  engine: EngineSnapshot;
-  simNowMs: number;
-  valores: Record<AulaCodigo, Valores>;
-  escenarios: Record<AulaCodigo, Escenario>;
-  velocidad: Velocidad;
-  corriendo: boolean;
-  recentLog: LogRow[];
-  scenarioTimeline?: Record<AulaCodigo, ScenarioTransition[]>;
-}
-
 interface AppState {
-  inicializado: boolean;
+  /** True once the silent session restore (refresh cookie) has finished. */
+  sesionLista: boolean;
   cuenta: CuentaUsuario | null;
   setCuenta: (cuenta: CuentaUsuario | null) => void;
+  setSesionLista: () => void;
+  /** Backend reachability, independent of authentication. */
   connected: boolean;
   probarConexion: () => Promise<boolean>;
+  /** Re-reads the account from the backend before a local-only write. */
   autorizar: (permiso: Permiso) => Promise<boolean>;
   sonido: boolean;
   prefsAulas: PrefsAulas;
-  umbrales: Umbrales;
-  horario: Horario;
-  escenarios: Record<AulaCodigo, Escenario>;
-  velocidad: Velocidad;
-  corriendo: boolean;
-  simNowMs: number;
-  valores: Record<AulaCodigo, Valores>;
-  estados: Record<AulaCodigo, EstadoAula>;
-  abiertos: Evento[];
-  log: LogRow[];
-
+  /** Loads the UI preferences from localStorage (client only). */
   iniciar: () => void;
   setSonido: (v: boolean) => void;
   setPrefsAulas: (p: PrefsAulas) => void;
-  setUmbrales: (u: Umbrales) => Promise<boolean>;
-  setHorario: (h: Horario) => Promise<boolean>;
-  setEscenario: (aula: AulaCodigo, e: Escenario) => Promise<boolean>;
-  corregirAula: (aula: AulaCodigo) => void;
-  setVelocidad: (v: Velocidad) => Promise<boolean>;
-  setCorriendo: (v: boolean) => Promise<boolean>;
-  acusar: (aula: AulaCodigo, idEvento: string) => Promise<boolean>;
-  inyectarEvento: (aula: AulaCodigo, tipo: TipoEvento) => Promise<boolean>;
-  agregarLog: (row: LogRow) => Promise<boolean>;
-}
-
-// ---------------------------------------------------------------------------
-// module-level simulation machinery (not React state)
-
-let engine: RuleEngine | null = null;
-let dataSource: DataSource | null = null;
-let intervalo: ReturnType<typeof setInterval> | null = null;
-let anclaRealMs = 0;
-let anclaSimMs = 0;
-let ultimoBucketMs = 0;
-let pendientesGuardar: LogRow[] = [];
-let scenarioTimeline: Record<AulaCodigo, ScenarioTransition[]> = {
-  "L-419": [{ at: 0, scenario: "clase_normal" }],
-  "A-1001": [{ at: 0, scenario: "clase_normal" }],
-};
-
-export function getDataSource(): DataSource {
-  if (!dataSource) throw new Error("store no inicializado");
-  return dataSource;
-}
-
-function simNow(velocidad: number): number {
-  return anclaSimMs + (Date.now() - anclaRealMs) * velocidad;
 }
 
 export const useApp = create<AppState>((set, get) => {
-  let sessionVersion = 0;
-  const persistSession = () => {
-    if (!engine || !get().inicializado) return;
-    const state = get();
-    saveLocal<SessionCheckpoint>("session:v2", {
-      version: 1,
-      engine: engine.snapshot(),
-      simNowMs: state.simNowMs,
-      valores: state.valores,
-      escenarios: state.escenarios,
-      velocidad: state.velocidad,
-      corriendo: state.corriendo,
-      recentLog: state.log.slice(-500),
-      scenarioTimeline,
-    });
-    if (pendientesGuardar.length > 0) {
-      const rows = pendientesGuardar;
-      pendientesGuardar = [];
-      void guardarLogRows(rows);
-    }
-  };
-
-  const aplicarEmits = (emits: EngineEmit[], fechaMs: number) => {
-    if (emits.length === 0) return;
-    const nuevas: LogRow[] = [];
-    for (const e of emits) {
-      if (e.accion === "cerrar") {
-        const closed = { ...e.evento };
-        pendientesGuardar.push(closed);
-        set((s) => ({
-          log: s.log.map((row) =>
-            row.id_evento === closed.id_evento
-              ? { ...row, cerrado: true, acuse: closed.acuse }
-              : row,
-          ),
-        }));
-        continue;
-      }
-      nuevas.push({ ...e.evento });
-      if (e.accion === "abrir") {
-        const cat = CATALOGO_EVENTOS[e.evento.tipo];
-        const titulo = `${cat.nombre} · ${e.evento.aula}`;
-        if (e.evento.severidad === "critico") {
-          toast.error(titulo, { description: cat.accion, duration: 10_000 });
-          const cuenta = get().cuenta;
-          if (cuenta && puede(cuenta, "recibir_alertas"))
-            void notificarTodos({
-              titulo,
-              cuerpo: cat.accion,
-              evento: e.evento,
-              url: "/alertas",
-            });
-          if (get().sonido) reproducirAlerta();
-        } else {
-          toast.warning(titulo, { description: cat.accion, duration: 6_000 });
-        }
-      }
-    }
-    if (nuevas.length > 0) {
-      pendientesGuardar.push(...nuevas);
-      set((s) => ({ log: aplicarRetencion([...s.log, ...nuevas], fechaMs) }));
-    }
-  };
-
-  const procesarBucket = (bucketMs: number, silencioso = false) => {
-    const eng = engine!;
-    const ds = dataSource!;
-    const fecha = new Date(bucketMs);
-    const emits: EngineEmit[] = [];
-    const valores: Record<AulaCodigo, Valores> = { ...get().valores };
-    for (const aula of CODIGOS_AULA) {
-      const ms = ds.medicionesActuales(aula, fecha);
-      const v: Valores = { ...valores[aula] };
-      for (const m of ms) {
-        v[m.magnitud] = m.valor;
-        emits.push(...eng.process(m));
-      }
-      valores[aula] = v;
-    }
-    emits.push(...eng.tick(bucketMs));
-    if (silencioso) {
-      // warm-up: keep log rows, skip toasts/push
-      const nuevas = emits
-        .filter((e) => e.accion !== "cerrar")
-        .map((e) => ({ ...e.evento }));
-      pendientesGuardar.push(...nuevas);
-      set((s) => ({ log: aplicarRetencion([...s.log, ...nuevas], bucketMs) }));
-    } else {
-      aplicarEmits(emits, bucketMs);
-    }
-    set({
-      valores,
-      abiertos: eng.eventosAbiertos(),
-      estados: Object.fromEntries(
-        CODIGOS_AULA.map((a) => [a, eng.getEstado(a, fecha)]),
-      ) as Record<AulaCodigo, EstadoAula>,
-      simNowMs: bucketMs,
-    });
-  };
-
-  const tickReal = () => {
-    const s = get();
-    if (!s.corriendo || !engine) return;
-    if (
-      !s.connected ||
-      (typeof navigator !== "undefined" && !navigator.onLine)
-    ) {
-      anclaRealMs = Date.now();
-      anclaSimMs = s.simNowMs;
-      return;
-    }
-    const objetivo = simNow(s.velocidad);
-    let bucket = ultimoBucketMs + TICK_MS;
-    let n = 0;
-    while (bucket <= objetivo && n < MAX_BUCKETS_POR_TICK) {
-      procesarBucket(bucket);
-      ultimoBucketMs = bucket;
-      bucket += TICK_MS;
-      n++;
-    }
-    if (n > 0) persistSession();
-  };
+  let conexionVersion = 0;
 
   return {
-    inicializado: false,
+    sesionLista: false,
     cuenta: null,
-    connected: false,
+    connected: true,
     sonido: false,
     prefsAulas: PREFS_AULAS_DEFAULT,
-    umbrales: umbralesSeed as Umbrales,
-    horario: HORARIO_DEFAULT,
-    escenarios: { "L-419": "clase_normal", "A-1001": "clase_normal" },
-    velocidad: 1,
-    corriendo: true,
-    simNowMs: 0,
-    valores: { "L-419": {}, "A-1001": {} },
-    estados: { "L-419": "Libre", "A-1001": "Libre" },
-    abiertos: [],
-    log: [],
 
     iniciar: () => {
-      if (get().inicializado || typeof window === "undefined") return;
-      const umbrales = loadLocal<Umbrales>(
-        "umbrales",
-        umbralesSeed as Umbrales,
-      );
-      const horario = loadLocal<Horario>("horario", HORARIO_DEFAULT);
-      const sonido = loadLocal<boolean>("sonido", false);
-      const prefsAulas = loadLocal<PrefsAulas>("prefsAulas", PREFS_AULAS_DEFAULT);
-      const escenarios = loadLocal<Record<AulaCodigo, Escenario>>(
-        "escenarios",
-        {
-          "L-419": "clase_normal",
-          "A-1001": "clase_normal",
-        },
-      );
-      engine = new RuleEngine({ umbrales, horario, aulas: AULAS });
-      for (const aula of CODIGOS_AULA) {
-        scenarioTimeline[aula] = [
-          { at: 0, scenario: "clase_normal" },
-          { at: Date.now(), scenario: escenarios[aula] },
-        ];
-      }
-      dataSource = new SimulatedDataSource({
-        horario: () => get().horario,
-        escenario: (aula) => get().escenarios[aula],
-        timeline: (aula) => scenarioTimeline[aula],
-      });
-      anclaRealMs = Date.now();
-      anclaSimMs = Date.now();
-      ultimoBucketMs =
-        Math.floor((anclaSimMs - WARMUP_MIN * 60_000) / TICK_MS) * TICK_MS;
+      if (typeof window === "undefined") return;
       set({
-        inicializado: true,
-        umbrales,
-        horario,
-        sonido,
-        prefsAulas,
-        escenarios,
-        simNowMs: anclaSimMs,
+        sonido: loadLocal<boolean>("sonido", false),
+        prefsAulas: loadLocal<PrefsAulas>("prefsAulas", PREFS_AULAS_DEFAULT),
       });
-      void get().probarConexion();
-
-      void cargarLogRows().then((rows) => {
-        if (rows.length > 0) {
-          set((s) => {
-            const ids = new Set(s.log.map((r) => r.id_evento));
-            const restauradas = rows.filter((r) => !ids.has(r.id_evento));
-            return {
-              log: aplicarRetencion(
-                [...restauradas, ...s.log],
-                s.simNowMs || Date.now(),
-              ).sort((a, b) => a.ts.localeCompare(b.ts)),
-            };
-          });
-        }
-      });
-
-      const checkpoint = loadLocal<SessionCheckpoint | null>(
-        "session:v2",
-        null,
-      );
-      let restored = false;
-      if (
-        checkpoint?.version === 1 &&
-        Number.isFinite(checkpoint.simNowMs) &&
-        checkpoint.simNowMs > 0 &&
-        Array.isArray(checkpoint.recentLog) &&
-        checkpoint.valores?.["L-419"] &&
-        checkpoint.valores?.["A-1001"] &&
-        checkpoint.escenarios?.["L-419"] &&
-        checkpoint.escenarios?.["A-1001"] &&
-        [1, 10, 60].includes(checkpoint.velocidad)
-      ) {
-        try {
-          engine.restore(checkpoint.engine);
-          if (
-            checkpoint.scenarioTimeline?.["L-419"] &&
-            checkpoint.scenarioTimeline?.["A-1001"]
-          )
-            scenarioTimeline = checkpoint.scenarioTimeline;
-          ultimoBucketMs = checkpoint.simNowMs;
-          anclaSimMs = ultimoBucketMs;
-          anclaRealMs = Date.now();
-          set({
-            simNowMs: ultimoBucketMs,
-            valores: checkpoint.valores,
-            escenarios: checkpoint.escenarios,
-            velocidad: checkpoint.velocidad,
-            corriendo: checkpoint.corriendo,
-            log: aplicarRetencion(checkpoint.recentLog, ultimoBucketMs),
-            abiertos: engine.eventosAbiertos(),
-            estados: Object.fromEntries(
-              CODIGOS_AULA.map((code) => [
-                code,
-                engine!.getEstado(code, new Date(ultimoBucketMs)),
-              ]),
-            ) as Record<AulaCodigo, EstadoAula>,
-          });
-          pendientesGuardar.push(...checkpoint.recentLog);
-          restored = true;
-        } catch {
-          /* Ignore a corrupt checkpoint; IndexedDB history is still restored. */
-        }
-      }
-      if (!restored) {
-        // Warm up only a new session. Reloading must not recreate old alerts.
-        let bucket = ultimoBucketMs + TICK_MS;
-        const ahora = Date.now();
-        while (bucket <= ahora) {
-          procesarBucket(bucket, true);
-          ultimoBucketMs = bucket;
-          bucket += TICK_MS;
-        }
-      }
-      persistSession();
-      if (intervalo) clearInterval(intervalo);
-      intervalo = setInterval(tickReal, 1000);
     },
 
     setCuenta: (cuenta) => set({ cuenta }),
+    setSesionLista: () => set({ sesionLista: true }),
 
-    // Lightweight reachability heartbeat, independent of authentication:
-    // pings a public endpoint so the sim clock freezes when the server is
-    // unreachable even while navigator.onLine still reports true.
+    // Lightweight heartbeat against the backend's public health endpoint, so
+    // the UI goes read-only when the server is unreachable even while
+    // navigator.onLine still reports true.
     probarConexion: async () => {
-      const version = ++sessionVersion;
+      const version = ++conexionVersion;
       try {
         if (typeof navigator !== "undefined" && !navigator.onLine)
           throw new Error("offline");
-        const response = await fetch("/api/umbrales", {
+        const response = await fetch(`${API_BASE_URL}/actuator/health`, {
           cache: "no-store",
           signal: AbortSignal.timeout(5000),
         });
         if (!response.ok) throw new Error("Server unavailable");
-        if (version !== sessionVersion) return false;
+        if (version !== conexionVersion) return false;
         set({ connected: true });
         return true;
       } catch {
-        if (version === sessionVersion) set({ connected: false });
+        if (version === conexionVersion) set({ connected: false });
         return false;
       }
     },
 
-    // Re-fetches the Auth.js session before a write so a stale local
-    // account (e.g. revoked or downgraded elsewhere) can't push a change.
     autorizar: async (permiso) => {
       const cuenta = get().cuenta;
       if (!cuenta || !puede(cuenta, permiso)) return false;
       try {
-        const response = await fetch("/api/auth/session", {
-          cache: "no-store",
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!response.ok) throw new Error("Session unavailable");
-        const body = await response.json();
-        const fresca: CuentaUsuario | null = body?.cuenta ?? null;
+        const fresca = await yo();
         set({ cuenta: fresca });
-        if (!fresca || !puede(fresca, permiso)) {
-          toast.error(
-            "No se guardó el cambio. Verifica la conexión e inicia sesión nuevamente.",
-          );
-          return false;
-        }
-        return true;
+        return puede(fresca, permiso);
       } catch {
-        toast.error(
-          "No se guardó el cambio. Verifica la conexión e inicia sesión nuevamente.",
-        );
         return false;
       }
     },
@@ -454,179 +103,17 @@ export const useApp = create<AppState>((set, get) => {
       saveLocal("prefsAulas", p);
       set({ prefsAulas: p });
     },
-
-    setUmbrales: async (u) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
-      saveLocal("umbrales", u);
-      engine?.setUmbrales(u);
-      const row: LogRow = {
-        ts: isoLima(new Date(get().simNowMs || Date.now())),
-        aula: "L-419",
-        id_evento: `CFG-${Date.now()}`,
-        tipo: "cambio_configuracion",
-        severidad: "info",
-        fuente: "ajustes",
-        valor: "umbrales actualizados",
-        umbral: "",
-        actor: get().cuenta?.email ?? "sistema",
-        estado_resultante: get().estados["L-419"],
-      };
-      pendientesGuardar.push(row);
-      set((s) => ({ umbrales: u, log: [...s.log, row] }));
-      persistSession();
-      return true;
-    },
-
-    setHorario: async (h) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
-      saveLocal("horario", h);
-      engine?.setHorario(h);
-      const row: LogRow = {
-        ts: isoLima(new Date(get().simNowMs || Date.now())),
-        aula: "L-419",
-        id_evento: `CFG-${Date.now()}-h`,
-        tipo: "cambio_configuracion",
-        severidad: "info",
-        fuente: "ajustes",
-        valor: "horario actualizado",
-        umbral: "",
-        actor: get().cuenta?.email ?? "sistema",
-        estado_resultante: get().estados["L-419"],
-      };
-      pendientesGuardar.push(row);
-      set((s) => ({ horario: h, log: [...s.log, row] }));
-      persistSession();
-      return true;
-    },
-
-    setEscenario: async (aula, e) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
-      if (
-        e === "intruso_ventana" &&
-        AULAS.find((item) => item.codigo === aula)!.ventanas === 0
-      )
-        return false;
-      scenarioTimeline[aula].push({
-        at: get().simNowMs + TICK_MS,
-        scenario: e,
-      });
-      set((s) => {
-        const escenarios = { ...s.escenarios, [aula]: e };
-        saveLocal("escenarios", escenarios);
-        return { escenarios };
-      });
-      persistSession();
-      return true;
-    },
-
-    // Acción rápida de la pantalla del aula (F3): no exige login, como un
-    // interruptor físico. Vuelve el escenario simulado a la normalidad.
-    corregirAula: (aula) => {
-      scenarioTimeline[aula].push({
-        at: get().simNowMs + TICK_MS,
-        scenario: "clase_normal",
-      });
-      set((s) => {
-        const escenarios = { ...s.escenarios, [aula]: "clase_normal" as Escenario };
-        saveLocal("escenarios", escenarios);
-        return { escenarios };
-      });
-      persistSession();
-      toast.success(`Corrección aplicada en ${aula}.`);
-    },
-
-    setVelocidad: async (v) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
-      // re-anchor so the sim clock is continuous across speed changes
-      anclaSimMs = get().corriendo ? simNow(get().velocidad) : get().simNowMs;
-      anclaRealMs = Date.now();
-      set({ velocidad: v });
-      persistSession();
-      return true;
-    },
-
-    setCorriendo: async (v) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
-      if (v) {
-        anclaSimMs = get().simNowMs || Date.now();
-        anclaRealMs = Date.now();
-      }
-      set({ corriendo: v });
-      persistSession();
-      return true;
-    },
-
-    acusar: async (aula, idEvento) => {
-      if (!(await get().autorizar("atender_incidentes"))) return false;
-      if (!engine) return false;
-      const actor = get().cuenta?.email ?? "sistema";
-      const fechaMs = get().simNowMs || Date.now();
-      const ev = engine.acusar(aula, idEvento, actor, fechaMs);
-      if (!ev) return false;
-      const row: LogRow = {
-        ts: isoLima(new Date(fechaMs)),
-        aula,
-        id_evento: `ACK-${idEvento}`,
-        tipo: "acuse",
-        severidad: "info",
-        fuente: idEvento,
-        valor: `acuse de ${ev.tipo}`,
-        umbral: "",
-        actor,
-        estado_resultante: engine.getEstado(aula, new Date(fechaMs)),
-      };
-      pendientesGuardar.push({ ...ev }, row);
-      set((s) => ({
-        abiertos: engine!.eventosAbiertos(),
-        estados: {
-          ...s.estados,
-          [aula]: engine!.getEstado(aula, new Date(fechaMs)),
-        },
-        log: [
-          ...s.log.map((item) =>
-            item.id_evento === ev.id_evento ? { ...ev } : item,
-          ),
-          row,
-        ],
-      }));
-      persistSession();
-      toast.success(`Acuse registrado (${ev.tipo})`);
-      return true;
-    },
-
-    inyectarEvento: async (aula, tipo) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
-      if (!engine) return false;
-      const fechaMs = get().simNowMs || Date.now();
-      const emit = engine.inyectar(
-        aula,
-        tipo,
-        fechaMs,
-        get().cuenta?.email ?? "sistema",
-      );
-      aplicarEmits([emit], fechaMs);
-      set((s) => ({
-        abiertos: engine!.eventosAbiertos(),
-        estados: {
-          ...s.estados,
-          [aula]: engine!.getEstado(aula, new Date(fechaMs)),
-        },
-      }));
-      persistSession();
-      return true;
-    },
-
-    agregarLog: async (row) => {
-      if (!(await get().autorizar("gestionar_dispositivos"))) return false;
-      pendientesGuardar.push(row);
-      set((s) => ({ log: [...s.log, row] }));
-      persistSession();
-      return true;
-    },
   };
 });
 
-function reproducirAlerta() {
+/** Escalation: a critical event without acknowledgement for 10+ minutes. */
+export function estaEscalado(ev: Evento, ahoraMs: number): boolean {
+  if (ev.acuse || ev.severidad !== "critico") return false;
+  return ahoraMs - new Date(ev.ts).getTime() > 10 * 60_000;
+}
+
+/** Short beep for new critical alerts (browsers may block it until a user gesture). */
+export function reproducirAlerta() {
   try {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
@@ -641,10 +128,4 @@ function reproducirAlerta() {
   } catch {
     // audio blocked until user interaction: fine
   }
-}
-
-/** Escalation: a critical event without acknowledgement for 10+ minutes. */
-export function estaEscalado(ev: Evento, simNowMs: number): boolean {
-  if (ev.acuse || ev.severidad !== "critico") return false;
-  return simNowMs - new Date(ev.ts).getTime() > 10 * 60_000;
 }

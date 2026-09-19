@@ -1,23 +1,15 @@
-// Institutional sign-in surface. Server component: reads real
-// configuration and reports honestly what is pending. Primary path is an
-// app-specific email+password account (never the user's real UTEC
-// credential); Google appears too once a client ID/secret is configured.
+// Institutional sign-in surface. The account is an app-specific
+// email+password created by an administrator (never the user's real UTEC
+// credential); authentication happens against the Spring Boot backend.
 
 import Image from "next/image";
-import Link from "next/link";
 import { ShieldCheckIcon, UsersIcon, BellRingIcon } from "lucide-react";
-import {
-  DOMINIO_INSTITUCIONAL,
-  proveedorIdentidadConfigurado,
-} from "@/lib/auth/identity";
-import { BotonGoogle } from "@/app/acceso/boton-google";
+import { DOMINIO_INSTITUCIONAL } from "@/lib/auth/identity";
 import { FormularioLogin } from "@/app/acceso/formulario-login";
 
 export const metadata = { title: "Acceso institucional — UTEC" };
 
 export default function AccesoPage() {
-  const configurado = proveedorIdentidadConfigurado();
-
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-12rem)] max-w-md flex-col items-center justify-center gap-8 py-8 text-center">
       <div className="flex flex-col items-center gap-3">
@@ -37,17 +29,6 @@ export default function AccesoPage() {
       </div>
 
       <FormularioLogin />
-
-      {configurado && (
-        <div className="w-full space-y-3">
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            o
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <BotonGoogle />
-        </div>
-      )}
 
       <ul className="w-full space-y-3 text-left text-sm">
         <li className="flex items-start gap-3">
@@ -73,12 +54,6 @@ export default function AccesoPage() {
         </li>
       </ul>
 
-      <Link
-        href="/"
-        className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-      >
-        Volver al panel de demostración
-      </Link>
     </div>
   );
 }

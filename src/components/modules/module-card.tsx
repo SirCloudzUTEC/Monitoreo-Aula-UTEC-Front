@@ -8,8 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sparkline } from "@/components/charts/sparkline";
 import { ModuleIcon } from "@/components/modules/module-icon";
-import { useSerie } from "@/lib/use-serie";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { SIN_SERIE, useSerie } from "@/lib/use-serie";
+import { CODIGOS_AULA } from "@/lib/aulas";
+import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
 import {
   CLASE_SEMAFORO,
   ETIQUETA_SEMAFORO,
@@ -34,7 +35,8 @@ function FilaAula({
   semaforo: Semaforo;
 }) {
   const info = MODULOS[modulo];
-  const valor = useApp((s) => s.valores[aula][info.principal]);
+  const { valores } = useEstados();
+  const valor = valores[aula][info.principal];
   const serie = useSerie(aula, info.principal, 60, 1);
   return (
     <div className="flex items-center gap-3">
@@ -48,7 +50,11 @@ function FilaAula({
         {formatearValor(info.principal, valor)}
       </div>
       <div className="min-w-0 flex-1">
-        <Sparkline data={serie} height={36} />
+        {SIN_SERIE.includes(info.principal) ? (
+          <span className="text-xs text-muted-foreground">sin serie numérica</span>
+        ) : (
+          <Sparkline data={serie} height={36} />
+        )}
       </div>
     </div>
   );
@@ -56,11 +62,10 @@ function FilaAula({
 
 export function ModuleCard({ modulo }: { modulo: ModuloId }) {
   const info = MODULOS[modulo];
-  const abiertos = useApp((s) => s.abiertos);
-  const valores = useApp((s) => s.valores);
-  const umbrales = useApp((s) => s.umbrales);
-  const horario = useApp((s) => s.horario);
-  const simNowMs = useApp((s) => s.simNowMs);
+  const { abiertos } = useEventosAbiertos();
+  const { valores, nowMs: simNowMs } = useEstados();
+  const { umbrales } = useUmbrales();
+  const { horario } = useHorario();
 
   const fecha = new Date(simNowMs); // 0 before init: values are empty then anyway
   const semaforos = Object.fromEntries(

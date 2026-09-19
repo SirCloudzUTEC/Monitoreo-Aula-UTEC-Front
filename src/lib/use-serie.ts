@@ -1,12 +1,13 @@
 "use client";
 
-// Hook: sampled series for charts, recomputed only when the simulated clock
-// crosses a sampling step (the simulator is deterministic, so sampling the
-// same window twice yields identical data).
+// Hook: historical series for the charts, straight from
+// `GET /api/aulas/{codigo}/serie`. The backend buckets in SQL, so a 7-day
+// range costs the same as one hour.
 
-import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { serieAula } from "@/lib/api/endpoints";
+import { useHabilitado } from "@/lib/api/hooks";
 import type { AulaCodigo, Magnitud } from "@/lib/types";
-import { getDataSource, useApp } from "@/lib/store";
 
 export interface PuntoSerie {
   ts: string;
@@ -14,24 +15,27 @@ export interface PuntoSerie {
   valor: number;
 }
 
+/** `puerta` is textual: the backend has no numeric series for it. */
+export const SIN_SERIE: readonly Magnitud[] = ["puerta"];
+
 export function useSerie(
   aula: AulaCodigo,
   magnitud: Magnitud,
   minutos: number,
   pasoMin = 1,
 ): PuntoSerie[] {
-  const inicializado = useApp((s) => s.inicializado);
-  const simNowMs = useApp((s) => s.simNowMs);
-  const escenario = useApp((s) => s.escenarios[aula]);
+  const habilitado = useHabilitado();
   const pasoMs = pasoMin * 60_000;
-  // quantize so the memo only invalidates once per sampling step
-  const bucket = Math.floor(simNowMs / pasoMs);
-
-  return useMemo(() => {
-    if (!inicializado || !bucket) return [];
-    const hasta = new Date(bucket * pasoMs);
-    const desde = new Date(hasta.getTime() - minutos * 60_000);
-    return getDataSource().serie(aula, magnitud, { desde, hasta, pasoMs });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inicializado, bucket, pasoMs, minutos, aula, magnitud, escenario]);
+  const { data } = useQuery({
+    queryKey: ["serie", aula, magnitud, minutos, pasoMin],
+    queryFn: () => {
+      const hasta = new Date();
+      return serieAula(aula, magnitud, new Date(hasta.getTime() - minutos * 60_000), hasta, pasoMs);
+    },
+    enabled: habilitado && !SIN_SERIE.includes(magnitud),
+    refetchInterval: Math.max(30_000, Math.min(pasoMs, 60_000)),
+  });
+  return data ?? EMPTY;
 }
+
+const EMPTY: PuntoSerie[] = [];

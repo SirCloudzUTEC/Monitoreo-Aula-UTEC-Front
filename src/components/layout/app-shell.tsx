@@ -4,12 +4,11 @@
 // Mobile first: bottom tab bar on small screens, sidebar on md+.
 // The TV view (/pantalla/*) renders without any chrome.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
 import {
   BellIcon,
   ClipboardListIcon,
@@ -23,7 +22,6 @@ import {
   ScrollTextIcon,
   Settings2Icon,
   SirenIcon,
-  SlidersHorizontalIcon,
   SparklesIcon,
   UsersIcon,
 } from "lucide-react";
@@ -31,7 +29,9 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useOnline } from "@/lib/use-online";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { useApp } from "@/lib/store";
+import { CODIGOS_AULA } from "@/lib/aulas";
+import { useCerrarSesion, useEstados, useEventosAbiertos } from "@/lib/api/hooks";
 import { puede, type Permiso } from "@/lib/auth/identity";
 import { horaLarga, ETIQUETA_ESTADO, CLASE_ESTADO } from "@/lib/format";
 
@@ -71,7 +71,6 @@ const NAV: NavItem[] = [
     soloDesktop: true,
   },
   { href: "/log", etiqueta: "Log de eventos", icono: ScrollTextIcon },
-  { href: "/simulador", etiqueta: "Simulador", icono: SlidersHorizontalIcon },
   {
     href: "/importar",
     etiqueta: "Importar plano",
@@ -96,14 +95,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarAbierto, setSidebarAbierto] = useState(true);
   const online = useOnline();
-  const abiertos = useApp((s) => s.abiertos);
-  const estados = useApp((s) => s.estados);
-  const simNowMs = useApp((s) => s.simNowMs);
-  const velocidad = useApp((s) => s.velocidad);
-  const corriendo = useApp((s) => s.corriendo);
+  const { abiertos } = useEventosAbiertos();
+  const { estados } = useEstados();
   const cuenta = useApp((s) => s.cuenta);
+  const cerrarSesion = useCerrarSesion();
+  // wall clock in Lima time, ticking locally (readings arrive every 5 s)
+  const [ahoraMs, setAhoraMs] = useState(0);
+  useEffect(() => {
+    const tick = () => setAhoraMs(Date.now());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
-  if (pathname.startsWith("/pantalla")) return <>{children}</>;
+  if (pathname.startsWith("/pantalla") || pathname === "/acceso") return <>{children}</>;
 
   const sinAcuse = abiertos.filter((e) => !e.acuse).length;
   const navVisible = NAV.filter(
@@ -159,15 +164,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Badge
               variant="outline"
               className="font-mono tabular-nums"
-              title="Hora simulada (Lima)"
+              title="Hora de Lima"
             >
-              {simNowMs ? horaLarga(simNowMs) : "--:--:--"}
+              {ahoraMs ? horaLarga(ahoraMs) : "--:--:--"}
             </Badge>
-            {(velocidad !== 1 || !corriendo) && (
-              <Badge variant={corriendo ? "secondary" : "destructive"}>
-                {corriendo ? `×${velocidad}` : "Pausado"}
-              </Badge>
-            )}
             {cuenta ? (
               <>
                 <Badge
@@ -181,7 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   variant="ghost"
                   size="icon"
                   title="Cerrar sesión"
-                  onClick={() => void signOut({ callbackUrl: "/acceso" })}
+                  onClick={() => void cerrarSesion()}
                 >
                   <LogOutIcon className="size-4" aria-hidden />
                 </Button>
@@ -204,9 +204,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         role="status"
         className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground"
       >
-        {online
-          ? "Demostración · datos simulados, sin sensores conectados"
-          : "Sin conexión · solo lectura"}
+        {!online
+          ? "Sin conexión con el servidor · solo lectura"
+          : cuenta && cuenta.estado !== "aprobada"
+            ? `Tu cuenta está ${cuenta.estado}: la administración debe aprobarla para que puedas ver datos.`
+            : "Datos en vivo de los sensores de las aulas"}
       </div>
       <div className="flex flex-1">
         {/* sidebar (md+) */}

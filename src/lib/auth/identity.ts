@@ -1,13 +1,16 @@
 // Institutional identity for the UTEC campus platform.
-// Access is restricted to @utec.edu.pe accounts. Tokens are verified
-// server-side against the provider confirmed by UTEC IT; this module owns
-// the domain and role rules, which are provider-agnostic.
+// Access is restricted to @utec.edu.pe accounts. Authentication and account
+// storage live in the Spring Boot backend; this module mirrors its role and
+// permission rules on the client (to hide UI, never to authorize: the backend
+// re-checks every request).
 
 export const DOMINIO_INSTITUCIONAL = "utec.edu.pe";
 
 export type Rol = "superadmin" | "admin_operativo" | "miembro";
+export const ROLES = ["superadmin", "admin_operativo", "miembro"] as const satisfies readonly Rol[];
 
 export type Ambito = "seguridad" | "mantenimiento" | "ti" | "bienestar";
+export const AMBITOS = ["seguridad", "mantenimiento", "ti", "bienestar"] as const satisfies readonly Ambito[];
 
 export type EstadoCuenta = "pendiente" | "aprobada" | "suspendida";
 
@@ -36,30 +39,6 @@ export function esCorreoInstitucional(email: unknown): email is string {
   return /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/i.test(local);
 }
 
-/** The configured superadmin account, if declared server-side. */
-export function correoSuperadmin(): string | null {
-  const value = process.env.SUPERADMIN_EMAIL?.trim().toLowerCase();
-  return value && esCorreoInstitucional(value) ? value : null;
-}
-
-/** Role granted to a verified institutional email on first sign-in. */
-export function rolInicial(email: string): Rol {
-  const superadmin = correoSuperadmin();
-  return superadmin !== null && email.toLowerCase() === superadmin
-    ? "superadmin"
-    : "miembro";
-}
-
-/**
- * Only used to bootstrap the single default superadmin (`SUPERADMIN_EMAIL`)
- * on its first sign-in — every other account is created already
- * `aprobada` by an admin through `POST /api/usuarios`, since there is no
- * self-registration anymore.
- */
-export function estadoInicial(rol: Rol): EstadoCuenta {
-  return rol === "superadmin" ? "aprobada" : "pendiente";
-}
-
 export type Permiso =
   | "ver_datos_autorizados"
   | "reportar_incidente"
@@ -68,6 +47,16 @@ export type Permiso =
   | "gestionar_usuarios"
   | "gestionar_dispositivos"
   | "gestionar_integraciones";
+
+export const PERMISOS = [
+  "ver_datos_autorizados",
+  "reportar_incidente",
+  "recibir_alertas",
+  "atender_incidentes",
+  "gestionar_usuarios",
+  "gestionar_dispositivos",
+  "gestionar_integraciones",
+] as const satisfies readonly Permiso[];
 
 const PERMISOS_BASE: Record<Rol, readonly Permiso[]> = {
   // Usuario normal: solo visualización (más reportar y recibir alertas).
@@ -102,15 +91,4 @@ export function permisosDe(cuenta: CuentaUsuario): readonly Permiso[] {
 
 export function puede(cuenta: CuentaUsuario, permiso: Permiso): boolean {
   return permisosDe(cuenta).includes(permiso);
-}
-
-/**
- * Whether the institutional identity provider is configured server-side.
- * Sign-in must stay visibly pending until UTEC IT confirms the provider
- * (Google or Microsoft) and its client ID is installed as an env var.
- */
-export function proveedorIdentidadConfigurado(): boolean {
-  return Boolean(
-    process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.MICROSOFT_OAUTH_CLIENT_ID,
-  );
 }

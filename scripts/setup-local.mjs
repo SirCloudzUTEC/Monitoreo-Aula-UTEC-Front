@@ -1,22 +1,19 @@
-import { randomBytes } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 
 if (existsSync(".env.local")) {
   console.log(".env.local ya existe; no se modificó.");
 } else {
-  const secret = randomBytes(48).toString("base64url");
   writeFileSync(
     ".env.local",
-    `# Solo desarrollo local. No subir a Git.\nAUTH_SECRET=${secret}\n` +
-      `# Completa estas dos para probar el login real con Google (ver README):\n` +
-      `GOOGLE_OAUTH_CLIENT_ID=\nGOOGLE_OAUTH_CLIENT_SECRET=\n` +
-      `# El único superusuario por defecto (siémbralo con npm run seed:superadmin):\n` +
-      `SUPERADMIN_EMAIL=diego.godoy.t@utec.edu.pe\n`,
+    `# Solo desarrollo local. No subir a Git.\n` +
+      `# Backend Spring Boot (ver ../backend). Su CORS_ALLOWED_ORIGINS debe incluir http://localhost:3000.\n` +
+      `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080\n` +
+      `# Clave pública VAPID (la misma que VAPID_PUBLIC_KEY del backend) para Web Push:\n` +
+      `NEXT_PUBLIC_VAPID_PUBLIC_KEY=\n`,
     { flag: "wx" },
   );
   console.log(
-    "Configuración local creada (AUTH_SECRET generado). Completa GOOGLE_OAUTH_CLIENT_ID/SECRET, " +
-      "DATABASE_URL y corre `npm run seed:superadmin` para crear el superusuario por defecto " +
-      "(diego.godoy.t@utec.edu.pe / HolaEquipo1234).",
+    "Configuración local creada. Levanta el backend (../backend) y entra con la cuenta " +
+      "superusuario que el backend siembra en su primer arranque (ver su README/.env).",
   );
 }

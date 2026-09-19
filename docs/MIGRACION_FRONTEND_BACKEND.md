@@ -78,3 +78,20 @@ Hoy el frontend simula todo del lado del navegador (motor de reglas, generador d
 - `npm run build` genera correctamente todas las rutas restantes (sin las que se borraron).
 - Login/creación de cuentas/logout, umbrales/horario, log de eventos, acuse de alertas y reporte de incidentes probados a mano contra el backend real antes de dar el corte por cerrado, más `npm run test:e2e` contra el stack real.
 - Confirmar que `git grep -n "@neondatabase/serverless\|next-auth"` no devuelve nada en `src/` tras el corte, y que `package.json` ya no las lista como dependencias.
+
+## 8. Estado de la implementación (corte aplicado)
+
+El corte de §5 paso 5 está hecho en el frontend: Auth.js, el simulador, el motor de reglas cliente, las rutas `/api/*` de Next (salvo `/api/asistente`), `@neondatabase/serverless`, `next-auth`, `web-push` y `db/` + scripts de Neon salieron; entraron `src/lib/api/{client,endpoints,hooks,session}.ts`, TanStack Query y el flujo de sesión con access token en memoria + cookie httpOnly.
+
+Contra el plan original se decidió distinto en estos puntos:
+
+- **`src/lib/simulator/rng.ts` se conserva**: ya no es parte del simulador, pero `lib/anomaly/detector.ts` (Isolation Forest de la vista `/modulo/[id]`) usa `mulberry32` para ser determinista.
+- **`src/data/aulas.json` sigue estático** (`src/lib/aulas.ts`): el plano 2D/3D y `notFound()` lo necesitan de forma síncrona; `GET /api/aulas` queda disponible pero no se consume todavía.
+- **`contactos` (localStorage) se mantiene**: el backend no tiene endpoint para ellos, así que no pueden "pasar a vivir en el backend" todavía.
+- **Alertas abiertas = dos consultas** (`severidad=critico` y `=alerta` con `abierto=true`) en vez de `abierto=true` a secas, porque el backend persiste los eventos `info` (ingreso, egreso, inicio_clase…) con `cerrado=false` y nunca los cierra (`ReglaEngineService.info()`); pedirlos todos traería miles de filas informativas. Conviene cerrarlos en el backend y así simplificar esta consulta.
+- **Pantalla del aula (`/pantalla/[aula]`)**: los botones verdes de "corregir" eran una acción del simulador; ahora la tarjeta en alerta muestra la acción recomendada como texto. El monitor debe tener una sesión iniciada (el backend exige JWT).
+- **Log (`/log`)**: aula y severidad se filtran en el servidor y se pagina de a 50; el cuadro de texto filtra solo la página cargada, y la "huella por actor" trabaja sobre una ventana de hasta 500 eventos (acotable por fechas). El CSV recorre todas las páginas del filtro (tope 10 000 filas).
+- **Prueba de push**: `POST /api/push/enviar` sin `usuarioId` difunde a todos, así que "Enviar prueba" apunta al propio usuario (solo el superadmin puede resolver su id vía `GET /api/usuarios`); el resto recibe una notificación local.
+- **Reportes**: `IncidenteDto` trae `reportadoPor` (id numérico), no el correo; la tabla muestra `usuario #id`.
+- **Contrato de enums**: `tests/contract-enums.test.ts` corre solo con `UTEC_API_BASE_URL` definido (necesita el backend arriba).
+- **E2E**: reescritos contra el stack real con `E2E_EMAIL`/`E2E_PASSWORD` (ya no existe el bypass de Auth.js).

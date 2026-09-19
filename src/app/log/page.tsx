@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from "react";
 import { DownloadIcon, ScrollTextIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,7 +25,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ETIQUETA_SEVERIDAD } from "@/components/events/evento-card";
-import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { CODIGOS_AULA } from "@/lib/aulas";
+import { useEventosPagina, useEventosVentana } from "@/lib/api/hooks";
+import { listarEventos } from "@/lib/api/endpoints";
+import { mensajeDeError } from "@/lib/api/client";
 import {
   actoresEnLog,
   exportarCsv,
@@ -82,8 +86,11 @@ function TablaLog({ rows }: { rows: LogRow[] }) {
   );
 }
 
+/** CSV export walks every server page of the current filter, up to this many rows. */
+const MAX_FILAS_CSV = 10_000;
+const TAMANO_PAGINA_CSV = 500;
+
 export default function LogPage() {
-  const log = useApp((s) => s.log);
   const [aula, setAula] = useState<AulaCodigo | "todas">("todas");
   const [sev, setSev] = useState<Severidad | "todas">("todas");
   const [texto, setTexto] = useState("");
@@ -92,28 +99,52 @@ export default function LogPage() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
 
-  const filtradas = useMemo(() => {
-    const rows = filtrarLog(log, { aula, severidad: sev, texto: texto || undefined });
-    return [...rows].reverse(); // newest first
-  }, [log, aula, sev, texto]);
-
-  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
+  // Registro tab: aula/severidad are filtered and paginated by the server; the
+  // free-text box narrows the page that is already loaded.
+  const pagina_ = useEventosPagina({
+    aula: aula === "todas" ? undefined : aula,
+    severidad: sev === "todas" ? undefined : sev,
+    page: pagina,
+    size: POR_PAGINA,
+  });
+  const total = pagina_.data?.totalElements ?? 0;
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   const paginaActual = Math.min(pagina, totalPaginas - 1);
-  const visibles = filtradas.slice(paginaActual * POR_PAGINA, (paginaActual + 1) * POR_PAGINA);
+  const visibles = useMemo(
+    () => filtrarLog(pagina_.data?.content ?? [], { texto: texto || undefined }),
+    [pagina_.data, texto],
+  );
 
-  const actores = useMemo(() => actoresEnLog(log), [log]);
-  const huella = useMemo(() => {
-    if (!actor) return [];
-    const desdeMs = desde ? new Date(`${desde}T00:00:00-05:00`).getTime() : 0;
-    const hastaMs = hasta ? new Date(`${hasta}T23:59:59-05:00`).getTime() : Number.MAX_SAFE_INTEGER;
-    return footprint(log, actor, desdeMs, hastaMs);
-  }, [log, actor, desde, hasta]);
+  // Huella tab: a window of the log (the range inputs narrow it server-side).
+  const desdeFecha = desde ? new Date(`${desde}T00:00:00-05:00`) : undefined;
+  const hastaFecha = hasta ? new Date(`${hasta}T23:59:59-05:00`) : undefined;
+  const ventana = useEventosVentana(desdeFecha, hastaFecha);
+  const filasVentana = useMemo(() => ventana.data?.content ?? [], [ventana.data]);
+  const actores = useMemo(() => actoresEnLog(filasVentana), [filasVentana]);
+  const huella = useMemo(
+    () => (actor ? footprint(filasVentana, actor, 0, Number.MAX_SAFE_INTEGER) : []),
+    [filasVentana, actor],
+  );
 
-  const exportar = () => {
-    // export what is filtered (order: chronological, as stored)
-    const rows = filtrarLog(log, { aula, severidad: sev, texto: texto || undefined });
-    const csv = exportarCsv(rows);
-    descargarArchivo(nombreArchivoCsv(aula), csv, "text/csv;charset=utf-8");
+  const exportar = async () => {
+    try {
+      const filas: LogRow[] = [];
+      for (let p = 0; filas.length < MAX_FILAS_CSV; p++) {
+        const r = await listarEventos({
+          aula: aula === "todas" ? undefined : aula,
+          severidad: sev === "todas" ? undefined : sev,
+          page: p,
+          size: TAMANO_PAGINA_CSV,
+        });
+        filas.push(...r.content);
+        if ((p + 1) * TAMANO_PAGINA_CSV >= r.totalElements) break;
+      }
+      // the server returns newest first; the CSV is chronological
+      const csv = exportarCsv(filas.reverse());
+      descargarArchivo(nombreArchivoCsv(aula), csv, "text/csv;charset=utf-8");
+    } catch (e) {
+      toast.error(mensajeDeError(e, "No se pudo exportar el log."));
+    }
   };
 
   return (
@@ -124,7 +155,7 @@ export default function LogPage() {
           <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Log de eventos</h1>
         </div>
         <p className="text-base text-muted-foreground">
-          {filtradas.length} de {log.length} filas visibles · retención de {RETENCION_DIAS} días
+          {total} filas en el registro · retención de {RETENCION_DIAS} días
         </p>
       </div>
 
@@ -175,15 +206,12 @@ export default function LogPage() {
               </SelectContent>
             </Select>
             <Input
-              placeholder="Buscar (tipo, fuente, actor…)"
+              placeholder="Filtrar en esta página…"
               value={texto}
-              onChange={(e) => {
-                setTexto(e.target.value);
-                setPagina(0);
-              }}
+              onChange={(e) => setTexto(e.target.value)}
               className="w-56"
             />
-            <Button variant="outline" size="sm" className="ml-auto" onClick={exportar}>
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => void exportar()}>
               <DownloadIcon className="size-4" aria-hidden /> Exportar CSV
             </Button>
           </div>
@@ -205,7 +233,7 @@ export default function LogPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={paginaActual >= totalPaginas - 1}
+              disabled={paginaActual >= totalPaginas - 1 || pagina_.isPlaceholderData}
               onClick={() => setPagina(paginaActual + 1)}
             >
               Siguiente →

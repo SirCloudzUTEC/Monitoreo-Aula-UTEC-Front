@@ -1,7 +1,17 @@
 "use client";
 
-// Browser-side Web Push helpers (F2/F8): permission, VAPID subscription and a
-// test notification through /api/push/send.
+// Browser-side Web Push helpers (F2/F8): permission, VAPID subscription
+// (registered in the backend, which sends the real pushes) and a test
+// notification.
+
+import { ApiError } from "@/lib/api/client";
+import {
+  eliminarPush,
+  enviarPush,
+  listarUsuarios,
+  registrarPush,
+} from "@/lib/api/endpoints";
+import { loadLocal, saveLocal } from "@/lib/data/storage";
 
 function base64UrlToUint8Array(base64: string): Uint8Array {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -51,40 +61,63 @@ export async function suscribirPush(): Promise<PushSubscription> {
       userVisibleOnly: true,
       applicationServerKey: base64UrlToUint8Array(clave).buffer as ArrayBuffer,
     }));
-  const response = await fetch("/api/push/subscribe", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(sub.toJSON()),
-  });
-  if (!response.ok)
+  try {
+    const { id } = await registrarPush(sub.toJSON());
+    saveLocal("pushSubId", id);
+  } catch (e) {
     throw new Error(
-      "No se pudo registrar el push. Verifica tu sesión.",
+      e instanceof ApiError && e.status === 403
+        ? "Tu cuenta no puede recibir alertas todavía."
+        : "No se pudo registrar el push. Verifica tu sesión.",
     );
+  }
   return sub;
 }
 
 export async function desuscribirPush(): Promise<void> {
   const sub = await suscripcionActual();
+  const id = loadLocal<number | null>("pushSubId", null);
+  if (id !== null) {
+    // best effort: the browser subscription is dropped either way
+    await eliminarPush(id).catch(() => {});
+    saveLocal("pushSubId", null);
+  }
   await sub?.unsubscribe();
 }
 
-/** Sends a test push to this browser. Returns the API error text if it fails. */
-export async function probarPush(): Promise<string | null> {
+const PRUEBA = {
+  titulo: "Prueba · Aula Digital UTEC",
+  cuerpo: "Las notificaciones push funcionan. ✓",
+  path: "/ajustes",
+};
+
+/**
+ * Sends a test push to the signed-in account. The backend endpoint targets a
+ * user id (omitting it would broadcast to everyone), and only a superadmin can
+ * look up their own id; everyone else gets a local notification, which still
+ * proves the browser permission and the service worker display path.
+ * Returns an error text on failure.
+ */
+export async function probarPush(email: string): Promise<string | null> {
   const sub = await suscripcionActual();
   if (!sub) return "No hay suscripción activa.";
-  const res = await fetch("/api/push/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      subscription: sub.toJSON(),
-      titulo: "Prueba · Aula Digital UTEC",
-      cuerpo: "Las notificaciones push funcionan. ✓",
-      url: "/ajustes",
-    }),
-  });
-  if (res.ok) return null;
-  const data = (await res.json().catch(() => null)) as {
-    error?: string;
-  } | null;
-  return data?.error ?? `Error ${res.status}`;
+  try {
+    const propio = (await listarUsuarios().catch(() => null))?.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase(),
+    );
+    if (propio) {
+      const { enviados } = await enviarPush({ usuarioId: propio.id, ...PRUEBA });
+      return enviados > 0 ? null : "El servidor no pudo entregar la notificación.";
+    }
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) return "La PWA aún no está lista.";
+    await reg.showNotification(PRUEBA.titulo, {
+      body: PRUEBA.cuerpo,
+      icon: "/icon-192.png",
+      data: { url: PRUEBA.path },
+    });
+    return null;
+  } catch (e) {
+    return e instanceof ApiError ? e.message : "No se pudo enviar la prueba.";
+  }
 }

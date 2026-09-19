@@ -1,53 +1,63 @@
 # Aula Digital UTEC
 
-Demostración del gemelo digital de las aulas **L-419** y **A-1001** para PI3 – UTEC: confort, iluminación, calidad de aire, ruido, aforo, accesos, ventanas y salud de nodos.
+Gemelo digital de las aulas **L-419** y **A-1001** para PI3 – UTEC: confort, iluminación, calidad de aire, ruido, aforo, accesos, ventanas y salud de nodos.
 
-**Los datos son simulados. No hay sensores, broker MQTT ni integración física conectados.** El plano SVG es esquemático; Blender y los planos oficiales quedan para otra fase.
+Este repositorio es el **frontend**: un cliente puro de la API REST del backend Spring Boot (`../backend`). Los datos vienen de las Raspberry Pi por MQTT → backend → motor de reglas → API; el navegador nunca habla con MQTT ni con la base de datos, y ya no simula nada. El plano SVG es esquemático; Blender y los planos oficiales quedan para otra fase.
 
-Stack: Next.js **16.3.4** (App Router), React, TypeScript, Tailwind, shadcn/ui, Recharts, Zustand y Vitest. Interfaz española. API compatible con Vercel serverless, sin base de datos externa en esta fase.
+Stack: Next.js **16.3.4** (App Router), React, TypeScript, Tailwind, shadcn/ui, Recharts, Zustand, TanStack Query y Vitest. Interfaz española.
 
 ## Desarrollo local
 
-Requisitos: Node.js 22 LTS o posterior compatible y npm. Se conserva un único `package-lock.json`.
+Requisitos: Node.js 22 LTS o posterior compatible, npm y el backend en marcha (`../backend`, por defecto en `http://localhost:8080`). Se conserva un único `package-lock.json`.
 
 ```bash
 npm ci
-npm run setup:local
+npm run setup:local      # crea .env.local (sin sobrescribirlo)
 npm run dev
 ```
 
-Abre `http://localhost:3000`. `setup:local` crea `.env.local` únicamente si no existe, con un `AUTH_SECRET` aleatorio. Consulta la salida del comando y completa el resto ahí mismo. Nunca subas `.env.local` a Git.
+Abre `http://localhost:3000`. Toda pantalla salvo `/acceso` exige sesión: el backend rechaza lecturas sin token, así que el frontend redirige al login.
 
-Si el archivo ya existía, completa `AUTH_SECRET`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `SUPERADMIN_EMAIL` y `DATABASE_URL` según `.env.example`; el script no lo sobrescribe. Cambiar variables requiere reiniciar el servidor.
+Para que el login funcione entre ambos procesos:
 
-No hay auto-registro: pon el correo del superusuario por defecto en `SUPERADMIN_EMAIL` (`diego.godoy.t@utec.edu.pe`) y siembra esa cuenta con `npm run seed:superadmin` (crea/actualiza `diego.godoy.t@utec.edu.pe` con la contraseña `HolaEquipo1234`; cámbiala después de tu primer ingreso, y no vuelvas a correr el script sobre una base donde ya la rotaste, porque la resetea). Desde esa cuenta, en `/usuarios`, crea el resto de cuentas y asígnales rol.
+- En el backend, `CORS_ALLOWED_ORIGINS` debe incluir **exactamente** el origen del frontend (`http://localhost:3000`). Un desajuste hace que el login falle en silencio.
+- En desarrollo local (http, mismo sitio) el backend usa `COOKIE_SECURE=false` y `COOKIE_SAMESITE=Lax`. Con el frontend en Vercel y el backend en otro dominio, la cookie necesita `Secure` + `SameSite=None` (ver `docs/BACKEND_SPRINGBOOT.md` §9).
+- `NEXT_PUBLIC_API_BASE_URL` (en `.env.local`) apunta al backend. Cambiar variables requiere reiniciar `npm run dev`.
 
-Google es opcional: si tu Workspace institucional bloquea crear clientes OAuth externos (`Error 403: org_internal`, común en organizaciones administradas), no hace falta — usa **correo y contraseña** en `/acceso`. Si igual quieres configurar Google más adelante: crea un proyecto en [Google Cloud Console](https://console.cloud.google.com), pantalla de consentimiento "Externo" en modo Prueba (sin dominio ni logo, solo agrega tu correo en "Test users"), y registra la redirect URI `http://localhost:3000/api/auth/callback/google`. Google solo sirve para iniciar sesión en una cuenta que ya existe — tampoco crea cuentas nuevas.
+No hay auto-registro: el backend siembra la cuenta superusuario (`SUPERADMIN_EMAIL`) en su primer arranque; desde esa cuenta, en `/usuarios`, se crea el resto de cuentas y se asigna rol.
 
 ### Login institucional y permisos
 
-El acceso es por cuenta real, restringida a `@utec.edu.pe`; no hay PIN compartido ni registro abierto. Toda cuenta la crea un superusuario desde `/usuarios` (correo, nombre y rol; el servidor genera la contraseña y la muestra una sola vez para que se le entregue a esa persona) — la única excepción es el superusuario por defecto de `SUPERADMIN_EMAIL`, que se autocrea en su primer login. Dos formas de entrar, intercambiables sobre la misma cuenta:
+El acceso es por cuenta real, restringida a `@utec.edu.pe`; no hay PIN compartido ni registro abierto. Toda cuenta la crea un superusuario desde `/usuarios` (correo, nombre y rol; el backend genera la contraseña y la muestra una sola vez para entregarla a esa persona). La contraseña es propia de la app (Argon2id en el backend), no la contraseña institucional. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.
 
-- **Correo y contraseña**: la contraseña es propia de la app (hash scrypt con sal, nunca en texto plano), no la contraseña institucional. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.
-- **Google** (opcional, solo si `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` están configurados). Sin esas variables, `/acceso` simplemente no muestra el botón de Google en vez de uno roto. Solo funciona sobre una cuenta que ya exista en `usuarios`; el login se rechaza para cualquier otro correo institucional.
+Cómo viaja la sesión:
 
-Roles, de menor a mayor alcance:
+- El **access token** (JWT, 15 min) vive solo en memoria de la pestaña: nunca en `localStorage` ni `sessionStorage`. Cada request lo envía como `Authorization: Bearer`.
+- El **refresh token** es una cookie `httpOnly` que setea el backend; JavaScript nunca la lee. Al cargar la página, o ante un 401, el cliente (`src/lib/api/client.ts`) hace exactamente un `POST /api/auth/refresh` silencioso y reintenta.
+- Suspender a una cuenta o cambiarle el rol invalida sus tokens de inmediato (`token_version`); el siguiente request devuelve 401 y el usuario vuelve a `/acceso`.
 
-- **miembro** — usuario normal: solo visualización (además de reportar incidentes y recibir alertas).
-- **admin_operativo** — administrador: además, atender incidentes, crear/editar aulas, actualizar planos importados, umbrales, horario y usar el Simulador.
-- **superadmin** — superusuario: todo lo anterior, más crear cuentas nuevas y asignarles rol desde `/usuarios`, y gestionar integraciones.
-- Las escrituras del cliente revalidan la sesión contra el servidor antes de aplicarse; las API protegidas nunca confían en el estado local.
+Roles, de menor a mayor alcance (el frontend solo los usa para ocultar controles; el backend autoriza cada request):
 
-**No usar para decisiones operativas, acceso físico ni datos privados hasta que UTEC confirme el proveedor de identidad institucional.**
+- **miembro** — solo visualización, reportar incidentes y recibir alertas.
+- **admin_operativo** — además, atender incidentes y editar umbrales y horario.
+- **superadmin** — todo lo anterior, más crear cuentas, cambiar roles, suspender y restablecer contraseñas desde `/usuarios`.
+- Una cuenta `pendiente` o `suspendida` no tiene permisos: ve un aviso y ningún dato.
 
-## Ejecutar en local
+## Pruebas
 
 ```bash
-npm install
-npm run dev
+npm test               # Vitest (unitarias, sin backend)
+npm run typecheck
+npm run lint
 ```
 
-Para probar la PWA y las pruebas E2E, usa el build de producción (el service worker no se registra con `npm run dev`):
+Contrato de enums con el backend (opcional, requiere el backend en marcha): compara los valores fijos de `types.ts`/`identity.ts`/catálogo con `GET /api/meta/enums`.
+
+```bash
+UTEC_API_BASE_URL=http://localhost:8080 npm test
+```
+
+Las pruebas E2E corren contra el **stack real** (backend + este frontend), con el build de producción (el service worker no se registra con `npm run dev`):
 
 ```bash
 # Terminal 1
@@ -55,10 +65,10 @@ npm run build
 npm run start -- --hostname 127.0.0.1 --port 3101
 
 # Terminal 2, desde el mismo proyecto
-npm run test:e2e
+E2E_EMAIL=... E2E_PASSWORD=... npm run test:e2e
 ```
 
-Playwright usa Chrome instalado en local. En CI usa Chromium, instalable con `npx playwright install --with-deps chromium`. Las pruebas de sesión usan `AUTH_TEST_BYPASS_SECRET` (provider Credentials que simula un login de superadmin sin pasar por Google real; solo activo cuando esa variable existe, y nunca en producción). `UTEC_BASE_URL` permite elegir otra instancia **de pruebas**, sin apuntar a producción.
+`E2E_EMAIL`/`E2E_PASSWORD` deben ser una cuenta aprobada del backend (un superusuario cubre todas las pantallas), y `CORS_ALLOWED_ORIGINS` del backend debe incluir `http://127.0.0.1:3101`. Playwright usa Chrome instalado en local; en CI, Chromium (`npx playwright install --with-deps chromium`). `UTEC_BASE_URL` permite elegir otra instancia **de pruebas**, sin apuntar a producción. `scripts/contract-smoke.mjs` verifica el formato SYS-09.2 de las mediciones contra el backend.
 
 Las trazas y capturas de fallos pueden contener datos de la sesión de prueba: permanecen ignoradas en `test-results/` y no deben publicarse sin revisar.
 
@@ -66,71 +76,56 @@ Las trazas y capturas de fallos pueden contener datos de la sesión de prueba: p
 
 | Ruta               | Uso                                                   |
 | ------------------ | ----------------------------------------------------- |
+| `/acceso`          | Inicio de sesión                                      |
 | `/`                | Resumen de las aulas y módulos                        |
 | `/modulo/[id]`     | Gráficas, umbrales y anomalías                        |
 | `/alertas`         | Alertas, acuses e historial                           |
 | `/aula/[codigo]`   | Plano 2D, nodos y componentes                         |
-| `/pantalla/[aula]` | Vista de monitor con valores grandes                  |
-| `/log`             | Filtros y CSV de diez columnas                        |
-| `/simulador`       | Escenarios, velocidad y eventos manuales              |
+| `/pantalla/[aula]` | Vista de monitor con valores grandes (requiere sesión iniciada en ese monitor) |
+| `/log`             | Log paginado desde el servidor y CSV de diez columnas |
 | `/importar`        | Contorno CSV, DXF o JSON con vista previa             |
 | `/reportar`        | Reportar un incidente (categoría, ubicación, descripción) |
-| `/reportes`        | Ver reportes: propios, o todos con `atender_incidentes` |
-| `/usuarios`        | Crear cuentas y asignar rol (solo superusuario)       |
+| `/reportes`        | Ver reportes: propios, o todos con `atender_incidentes` (atender/resolver) |
+| `/usuarios`        | Crear cuentas, cambiar rol, suspender (solo superusuario) |
 | `/ajustes`         | Sesión, umbrales, horario, contactos y notificaciones |
 
 Se conservan redirecciones desde `/dashboard`, `/configuracion`, `/footprint`, `/aulas/:aulaId` y `/login`.
 
-## Simulación, persistencia y offline
+## Datos, persistencia y offline
 
-Cada navegador ejecuta su propio motor de reglas. Al iniciar por primera vez se simulan los últimos 30 minutos; las recargas posteriores restauran el reloj, estado del motor, alertas y acuses. Los identificadores de eventos evitan colisiones entre sesiones nuevas.
+Las lecturas y el estado de cada aula se consultan cada 5 s (`GET /api/aulas/{codigo}/estado`); las alertas abiertas y el log, cada 15–30 s, con TanStack Query. El log, los umbrales, el horario, los acuses y los reportes viven en el backend (fuente única de verdad): dos navegadores ven lo mismo.
 
-- localStorage: configuración, plano y checkpoint reciente.
-- IndexedDB: historial de eventos. La vista aplica retención de 90 días; no hay copias de respaldo centrales ni sincronización entre usuarios.
-- Los cambios de escenario se guardan con su instante de inicio para no reescribir las curvas anteriores ni reiniciar el CO₂ al cambiar de hora.
-- Las API son demostraciones sin estado: no representan el historial privado del navegador ni garantizan la misma selección de escenario/configuración. `/api/umbrales` valida, pero no persiste cambios en servidor.
-- La PWA guarda documentos y recursos visitados; evita mezclar HTML, respuestas RSC y API. **Abre las pantallas con conexión antes de depender de ellas offline.**
-- Al detectar desconexión o imposibilidad de validar la conexión con el servidor, conserva las lecturas guardadas y congela el reloj. No autoriza escrituras offline. La comprobación periódica puede tardar hasta 30 segundos más el timeout de cinco segundos si el navegador no emite un evento offline.
-- No se garantiza la recuperación ante borrado de datos del navegador, cuota agotada, cierre durante una escritura o conflictos entre pestañas. Exporta CSV para conservar evidencias importantes.
+- Solo quedan en el navegador (localStorage) conveniencias por equipo: preferencia de sonido, aulas elegidas del panel, plano importado en `/importar` y contactos de notificación (aún sin endpoint en el backend).
+- La PWA guarda documentos y recursos visitados; evita mezclar HTML y respuestas de la API. **Abre las pantallas con conexión antes de depender de ellas offline.**
+- Un sondeo de `GET /actuator/health` del backend detecta desconexión: la app pasa a solo lectura y se recupera sola al volver la conexión. No hay escrituras offline. La comprobación periódica puede tardar hasta 30 segundos más el timeout de cinco segundos si el navegador no emite un evento offline.
+- Las alertas críticas llegan por notificación push desde el backend aunque la app esté cerrada; dentro de la app además salen como toast (y sonido, si está activado).
 
 ## Preparar un despliegue en Vercel
 
 El repositorio de trabajo es `SirCloudzUTEC/Monitoreo-Aula-UTEC-Front`. Las correcciones se revisan en una rama y PR; **no ejecutar comandos que reemplacen `main` ni publicar producción sin validar un preview**.
 
-En el proyecto Vercel, selecciona Next.js y configura las variables para el entorno correspondiente (Preview o Production):
+En el proyecto Vercel, selecciona Next.js y configura para el entorno correspondiente (Preview o Production):
 
 | Variable                       | Requisito                                                                             |
 | ------------------------------ | -------------------------------------------------------------------------------------- |
-| `AUTH_SECRET`                  | Secreto aleatorio de Auth.js; solo servidor, estable entre instancias                 |
-| `DATABASE_URL`                 | Conexión Neon/Postgres; sin ella el login falla cerrado (no hay dónde guardar cuentas) |
-| `GOOGLE_OAUTH_CLIENT_ID`       | Opcional. Cliente OAuth de Google Cloud Console, redirect URI de este entorno          |
-| `GOOGLE_OAUTH_CLIENT_SECRET`   | Opcional. Secreto del cliente OAuth; solo servidor                                     |
-| `SUPERADMIN_EMAIL`             | Correo `@utec.edu.pe` del superusuario por defecto (siémbralo con `npm run seed:superadmin`) |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública, solo si se habilita push                                                |
-| `VAPID_PRIVATE_KEY`            | Clave privada push, solo servidor                                                      |
-| `VAPID_SUBJECT`                | Contacto válido `mailto:...` o `https://...`, necesario para push                      |
+| `NEXT_PUBLIC_API_BASE_URL`     | URL HTTPS pública del backend Spring Boot, sin barra final                             |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública VAPID, solo si se habilita push; debe ser la misma que `VAPID_PUBLIC_KEY` del backend |
 
-Sin `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, `/acceso` simplemente no muestra el botón de Google; el login con correo y contraseña sigue funcionando igual. Sin `DATABASE_URL` o `AUTH_SECRET`, el login falla cerrado (ningún método funciona, no hay dónde guardar cuentas ni firmar sesiones). Para generar `AUTH_SECRET`:
-
-```bash
-node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
-```
-
-Guárdalo solo en la configuración privada del servidor. No adjuntes la salida a issues o commits. Rotarlo invalida las sesiones existentes.
+Ya no se configuran aquí `AUTH_SECRET`, `DATABASE_URL`, `GOOGLE_OAUTH_*`, `SUPERADMIN_EMAIL`, `VAPID_PRIVATE_KEY` ni variables MQTT: pertenecen al backend. En el backend, `CORS_ALLOWED_ORIGINS` debe listar el dominio de Vercel de este despliegue (y `COOKIE_SECURE=true`, `COOKIE_SAMESITE=None` si están en dominios distintos).
 
 ### Web Push opcional
 
-Genera claves con `npx web-push generate-vapid-keys`, configura las tres variables VAPID, recompila y prueba con HTTPS (o localhost) y una cuenta aprobada. En Ajustes, concede permiso y (con cuenta superadmin) envía una prueba.
+Genera claves con `npx web-push generate-vapid-keys`; la privada va solo en el backend (`VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`) y la pública también en `NEXT_PUBLIC_VAPID_PUBLIC_KEY` de este frontend. Prueba con HTTPS (o localhost) y una cuenta aprobada. En Ajustes, concede permiso y envía una prueba.
 
-La suscripción pertenece al navegador que está abierto: **no hay registro central de dispositivos ni alertas programadas en servidor al cerrar la app**. Los errores push no desactivan las alertas in-app. Correo y Telegram son adaptadores pendientes; el escalamiento visual indica contactar al responsable, no que se haya enviado un mensaje.
+Las suscripciones se guardan en el backend por cuenta y por navegador, y las alertas críticas se envían desde allí. Los errores push no desactivan las alertas in-app. Correo y Telegram son adaptadores pendientes; el escalamiento visual indica contactar al responsable, no que se haya enviado un mensaje.
 
-## Fase 2 y documentación
+## Documentación
 
-`MqttDataSource` es un stub: configurar `NEXT_PUBLIC_MQTT_WS_URL` no conecta hardware por sí solo. No expongas credenciales MQTT al cliente. Se requieren broker, procesador de aula y una estrategia de autenticación/sincronización antes de sustituir el simulador.
-
+- [Migración frontend → backend](docs/MIGRACION_FRONTEND_BACKEND.md)
+- [Backend Spring Boot](docs/BACKEND_SPRINGBOOT.md)
 - [Decisiones](docs/DECISIONES.md)
 - [Arquitectura](docs/ARQUITECTURA.md)
 - [Mapeo de requisitos](docs/MAPEO_REQUISITOS.md)
 - [Integración y verificación](docs/INTEGRACION.md)
 
-El simulador no captura imágenes ni audio. Con sesión activa, los eventos del log quedan atribuidos al correo institucional real de quien los generó.
+La app no captura imágenes ni audio. Los eventos del log quedan atribuidos al correo institucional real de quien los generó.

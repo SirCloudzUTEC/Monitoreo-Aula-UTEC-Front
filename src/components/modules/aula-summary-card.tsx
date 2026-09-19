@@ -7,8 +7,8 @@ import Link from "next/link";
 import { CalendarClockIcon, MonitorIcon, UsersIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { useApp } from "@/lib/store";
-import { getAula } from "@/lib/simulator/profiles";
+import { getAula } from "@/lib/aulas";
+import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
 import { bloqueEnCurso, minutosRestantes, proximoBloque, DIAS_SEMANA } from "@/lib/schedule";
 import { CLASE_ESTADO, ETIQUETA_ESTADO, formatearValor, fechaHoraCorta } from "@/lib/format";
 import { CLASE_FONDO_SEMAFORO, semaforoModulo } from "@/lib/modules";
@@ -24,12 +24,12 @@ const MODULO_DE_MEDICION: Record<"temperatura" | "humedad" | "co2" | "ruido", Mo
 };
 
 export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
-  const estado = useApp((s) => s.estados[aula]);
-  const valores = useApp((s) => s.valores[aula]);
-  const umbrales = useApp((s) => s.umbrales);
-  const abiertos = useApp((s) => s.abiertos);
-  const horario = useApp((s) => s.horario);
-  const simNowMs = useApp((s) => s.simNowMs);
+  const { estados, valores: todos, nowMs: simNowMs } = useEstados();
+  const estado = estados[aula];
+  const valores = todos[aula];
+  const { umbrales } = useUmbrales();
+  const { abiertos } = useEventosAbiertos();
+  const { horario } = useHorario();
   const spec = getAula(aula);
 
   const fecha = new Date(simNowMs); // 0 before init: values are empty then anyway

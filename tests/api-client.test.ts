@@ -3,6 +3,7 @@ import {
   ApiError,
   api,
   getAccessToken,
+  mensajeDeError,
   onSesionPerdida,
   setAccessToken,
 } from "@/lib/api/client";
@@ -137,6 +138,37 @@ describe("api client", () => {
     setAccessToken("t");
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
     await expect(api("/api/push/subscripciones/1", { method: "DELETE" })).resolves.toBeUndefined();
+  });
+});
+
+describe("refresh across tabs", () => {
+  it("runs inside a Web Lock so two tabs never replay the same (already rotated) cookie", async () => {
+    const orden: string[] = [];
+    vi.stubGlobal("navigator", {
+      locks: {
+        request: vi.fn(async (nombre: string, cb: () => Promise<unknown>) => {
+          orden.push(`lock:${nombre}`);
+          return cb();
+        }),
+      },
+    });
+    setAccessToken("viejo");
+    fetchMock
+      .mockResolvedValueOnce(json(401))
+      .mockResolvedValueOnce(json(200, { accessToken: "nuevo" }))
+      .mockResolvedValueOnce(json(200, { ok: 1 }));
+    await api("/api/horario");
+    expect(orden).toEqual(["lock:aula-digital:refresh"]);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("mensajeDeError", () => {
+  it("shows server and app messages, but never raw runtime errors", () => {
+    expect(mensajeDeError(new ApiError(409, "Ya existe."))).toBe("Ya existe.");
+    expect(mensajeDeError(new Error("No se guardó el horario de L-419: x"))).toBe("No se guardó el horario de L-419: x");
+    expect(mensajeDeError(new TypeError("Failed to fetch"), "Falló.")).toBe("Falló.");
+    expect(mensajeDeError("cualquier cosa", "Falló.")).toBe("Falló.");
   });
 });
 

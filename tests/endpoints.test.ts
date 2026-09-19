@@ -6,7 +6,9 @@ import {
   listarEventos,
   obtenerHorario,
   serieAula,
+  valoresDeLecturas,
 } from "@/lib/api/endpoints";
+import type { Medicion } from "@/lib/types";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -113,5 +115,30 @@ describe("wire mapping", () => {
       page: "2",
       size: "50",
     });
+  });
+});
+
+describe("valoresDeLecturas", () => {
+  const lectura = (nodo: Medicion["nodo"], magnitud: Medicion["magnitud"], valor: number, ts: string): Medicion => ({
+    ts, aula: "L-419", nodo, magnitud, valor, unidad: "",
+  });
+
+  it("keeps the lowest battery and window distance across nodes (the worst case)", () => {
+    const v = valoresDeLecturas([
+      lectura("nodoAmbiental", "bateria", 80, "2026-09-03T14:05:10-05:00"),
+      lectura("nodoPuerta", "bateria", 12, "2026-09-03T14:05:00-05:00"),
+      lectura("nodoVentana1", "proximidad_ventana", 2.5, "2026-09-03T14:05:00-05:00"),
+      lectura("nodoVentana2", "proximidad_ventana", 0.4, "2026-09-03T14:04:00-05:00"),
+    ]);
+    expect(v.bateria).toBe(12);
+    expect(v.proximidad_ventana).toBe(0.4);
+  });
+
+  it("keeps the newest reading for every other magnitude", () => {
+    const v = valoresDeLecturas([
+      lectura("nodoAmbiental", "temperatura", 24, "2026-09-03T14:00:00-05:00"),
+      lectura("nodoAmbiental", "temperatura", 26, "2026-09-03T14:05:00-05:00"),
+    ]);
+    expect(v.temperatura).toBe(26);
   });
 });

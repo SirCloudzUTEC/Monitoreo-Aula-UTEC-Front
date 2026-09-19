@@ -11,6 +11,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   BellIcon,
+  CpuIcon,
   ClipboardListIcon,
   DoorOpenIcon,
   FileUpIcon,
@@ -29,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useOnline } from "@/lib/use-online";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { AvisoErrores } from "@/components/layout/aviso-errores";
 import { useApp } from "@/lib/store";
 import { CODIGOS_AULA } from "@/lib/aulas";
 import { useCerrarSesion, useEstados, useEventosAbiertos } from "@/lib/api/hooks";
@@ -83,6 +85,13 @@ const NAV: NavItem[] = [
     icono: UsersIcon,
     soloDesktop: true,
     permiso: "gestionar_usuarios",
+  },
+  {
+    href: "/dispositivos",
+    etiqueta: "Dispositivos",
+    icono: CpuIcon,
+    soloDesktop: true,
+    permiso: "gestionar_dispositivos",
   },
   { href: "/ajustes", etiqueta: "Ajustes", icono: Settings2Icon },
 ];
@@ -204,12 +213,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         role="status"
         className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground"
       >
-        {!online
-          ? "Sin conexión con el servidor · solo lectura"
-          : cuenta && cuenta.estado !== "aprobada"
-            ? `Tu cuenta está ${cuenta.estado}: la administración debe aprobarla para que puedas ver datos.`
-            : "Datos en vivo de los sensores de las aulas"}
+        {online ? "Datos en vivo de los sensores de las aulas" : "Sin conexión con el servidor · solo lectura"}
       </div>
+      <AvisoErrores conectado={online} />
       <div className="flex flex-1">
         {/* sidebar (md+) */}
         <aside

@@ -73,11 +73,20 @@ export interface Usuario {
 
 export const listarUsuarios = () => api<Usuario[]>("/api/usuarios");
 
-export const crearUsuario = (body: { email: string; nombre: string; rol: Rol }) =>
+export const crearUsuario = (body: {
+  email: string;
+  nombre: string;
+  rol: Rol;
+  /** required (at least one) for admin_operativo, ignored otherwise */
+  ambitos?: Ambito[];
+}) =>
   api<{ email: string; password: string }>("/api/usuarios", { method: "POST", body });
 
 export const suspenderUsuario = (id: number) =>
   api<Usuario>(`/api/usuarios/${id}/suspender`, { method: "POST" });
+
+export const reactivarUsuario = (id: number) =>
+  api<Usuario>(`/api/usuarios/${id}/reactivar`, { method: "POST" });
 
 export const restablecerPassword = (id: number) =>
   api<{ email: string; password: string }>(`/api/usuarios/${id}/restablecer-password`, {
@@ -98,11 +107,35 @@ export interface EstadoAulaVivo {
   /** Server clock at the moment of the reading (the app's "now"). */
   tsMs: number;
   valores: Valores;
+  /** Timestamp of the newest reading of any node; 0 if the room never reported. */
+  ultimaLecturaMs: number;
 }
 
+/** Magnitudes reported by several nodes of one classroom, where the worst case is the minimum. */
+const PEOR_CASO_MINIMO: readonly Magnitud[] = ["bateria", "proximidad_ventana"];
+
+/**
+ * Collapses the per-node readings into one value per magnitude. Battery and
+ * window proximity come from several nodes, so the lowest one is kept (it is
+ * the one that can trip a threshold); anything else keeps the newest reading.
+ */
 export function valoresDeLecturas(lecturas: Medicion[]): Valores {
   const v: Valores = {};
-  for (const m of lecturas) v[m.magnitud] = m.valor;
+  const ts: Partial<Record<Magnitud, string>> = {};
+  for (const m of lecturas) {
+    const actual = v[m.magnitud];
+    const reemplaza =
+      actual === undefined ||
+      (PEOR_CASO_MINIMO.includes(m.magnitud) &&
+        typeof actual === "number" &&
+        typeof m.valor === "number"
+        ? m.valor < actual
+        : m.ts > (ts[m.magnitud] ?? ""));
+    if (reemplaza) {
+      v[m.magnitud] = m.valor;
+      ts[m.magnitud] = m.ts;
+    }
+  }
   return v;
 }
 
@@ -118,6 +151,7 @@ export async function estadoAula(codigo: AulaCodigo): Promise<EstadoAulaVivo> {
     estado: r.estado,
     tsMs: new Date(r.ts).getTime(),
     valores: valoresDeLecturas(r.ultimaLectura ?? []),
+    ultimaLecturaMs: Math.max(0, ...(r.ultimaLectura ?? []).map((m) => new Date(m.ts).getTime())),
   };
 }
 
@@ -259,6 +293,8 @@ export interface Incidente {
   atendidoPor?: number;
   atendidoEn?: string;
   resueltoEn?: string;
+  /** Only present in the operational list (staff), never in a member's own reports. */
+  reportadoPorEmail?: string;
 }
 
 export const crearIncidente = (body: {
@@ -280,6 +316,38 @@ export const atenderIncidente = (id: number) =>
 
 export const resolverIncidente = (id: number, estado: "resuelto" | "descartado") =>
   api<Incidente>(`/api/incidentes/${id}/resolver`, { method: "POST", body: { estado } });
+
+// ---------------------------------------------------------------------------
+// dispositivos (nodos MQTT)
+
+export interface Dispositivo {
+  id: number;
+  aula: AulaCodigo;
+  nodo: string;
+  mqttUsername: string;
+  activo: boolean;
+  ultimoLatidoEn?: string;
+}
+
+/** Returned once by register/rotate: the password is never retrievable again. */
+export interface CredencialDispositivo {
+  id: number;
+  aula: AulaCodigo;
+  nodo: string;
+  mqttUsername: string;
+  mqttPassword: string;
+}
+
+export const listarDispositivos = () => api<Dispositivo[]>("/api/dispositivos");
+
+export const registrarDispositivo = (body: { aula: AulaCodigo; nodo: string }) =>
+  api<CredencialDispositivo>("/api/dispositivos", { method: "POST", body });
+
+export const rotarCredencial = (id: number) =>
+  api<CredencialDispositivo>(`/api/dispositivos/${id}/rotar-credencial`, { method: "POST" });
+
+export const actualizarDispositivo = (id: number, activo: boolean) =>
+  api<Dispositivo>(`/api/dispositivos/${id}`, { method: "PUT", body: { activo } });
 
 // ---------------------------------------------------------------------------
 // push

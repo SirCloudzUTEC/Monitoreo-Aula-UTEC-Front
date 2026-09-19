@@ -4,6 +4,7 @@
 // refreshed every 5 s from the backend, full-width red banner on critical.
 
 import { notFound, useParams } from "next/navigation";
+import { AvisoObsoleto } from "@/components/modules/aviso-obsoleto";
 import { CODIGOS_AULA, getAula } from "@/lib/aulas";
 import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
 import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
@@ -71,7 +72,7 @@ const METRICAS: MetricaConfig[] = [
 export default function PantallaPage() {
   const params = useParams<{ aula: string }>();
   const aula = params.aula as AulaCodigo;
-  const { estados, valores: todos, nowMs: simNowMs } = useEstados();
+  const { estados, valores: todos, antiguedadMs, nowMs: simNowMs } = useEstados();
   const valido = CODIGOS_AULA.includes(aula);
   const valores = valido ? todos[aula] : undefined;
   const estado = valido ? estados[aula] : "Cerrada";
@@ -100,6 +101,10 @@ export default function PantallaPage() {
             {CATALOGO_EVENTOS[criticos[0].tipo].accion}
           </div>
         </div>
+      )}
+
+      {valido && (
+        <AvisoObsoleto antiguedadMs={antiguedadMs[aula]} oscuro className="mb-6 text-[22px]" />
       )}
 
       {/* header */}

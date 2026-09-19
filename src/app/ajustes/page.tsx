@@ -49,6 +49,7 @@ import {
 } from "@/lib/notify/push-client";
 import type { AulaCodigo, BloqueHorario, Horario, Umbrales } from "@/lib/types";
 import { useOnline } from "@/lib/use-online";
+import { CambiarPassword } from "@/app/ajustes/cambiar-password";
 
 interface CampoUmbral {
   key: keyof Umbrales;
@@ -145,8 +146,8 @@ export default function AjustesPage() {
   const setSonido = useApp((s) => s.setSonido);
   const prefsAulas = useApp((s) => s.prefsAulas);
   const setPrefsAulas = useApp((s) => s.setPrefsAulas);
-  const { umbrales } = useUmbrales();
-  const { horario } = useHorario();
+  const { umbrales, listo: umbralesListos } = useUmbrales();
+  const { horario, listo: horarioListo } = useHorario();
   const guardarUmbralesApi = useGuardarUmbrales();
   const guardarHorarioApi = useGuardarHorario();
   const cerrarSesion = useCerrarSesion();
@@ -154,6 +155,10 @@ export default function AjustesPage() {
   const online = useOnline();
   const esAdmin =
     online && (cuenta ? puede(cuenta, "gestionar_dispositivos") : false);
+  // Until the live values arrive the form shows placeholders; saving those would
+  // overwrite the real thresholds/schedule with defaults.
+  const puedeEditarUmbrales = esAdmin && umbralesListos;
+  const puedeEditarHorario = esAdmin && horarioListo;
   const puedeRecibirAlertas =
     online && (cuenta ? puede(cuenta, "recibir_alertas") : false);
   const [borrador, setBorrador] = useState<Record<string, string>>({});
@@ -234,7 +239,7 @@ export default function AjustesPage() {
       }
     }
     try {
-      await guardarHorarioApi.mutateAsync(h);
+      await guardarHorarioApi.mutateAsync({ nuevo: h, actual: horario });
     } catch (e) {
       toast.error(mensajeDeError(e, "No se pudo guardar el horario."));
       return;
@@ -318,6 +323,8 @@ export default function AjustesPage() {
           </p>
         </CardContent>
       </Card>
+
+      {cuenta && <CambiarPassword />}
 
       {/* notifications */}
       <Card>
@@ -453,6 +460,11 @@ export default function AjustesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {esAdmin && !umbralesListos && (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Cargando los umbrales vigentes del servidor…
+            </p>
+          )}
           {!esAdmin && (
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
               Solo lectura: necesitas una cuenta administradora o superusuaria
@@ -475,7 +487,7 @@ export default function AjustesPage() {
                     type="number"
                     step="any"
                     min={0}
-                    disabled={!esAdmin}
+                    disabled={!puedeEditarUmbrales}
                     value={valorCampo(c.key)}
                     onChange={(e) =>
                       setBorrador((b) => ({ ...b, [c.key]: e.target.value }))
@@ -486,7 +498,7 @@ export default function AjustesPage() {
             </fieldset>
           ))}
           <div>
-            <Button onClick={guardarUmbrales} disabled={!esAdmin}>
+            <Button onClick={guardarUmbrales} disabled={!puedeEditarUmbrales}>
               Guardar umbrales
             </Button>
           </div>
@@ -512,7 +524,7 @@ export default function AjustesPage() {
                       onValueChange={(v) =>
                         editarBloque(a, i, { dia: Number(v) })
                       }
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                     >
                       <SelectTrigger className="w-32" aria-label="Día">
                         <SelectValue />
@@ -529,7 +541,7 @@ export default function AjustesPage() {
                       type="time"
                       className="w-28"
                       value={b.inicio}
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                       onChange={(e) =>
                         editarBloque(a, i, { inicio: e.target.value })
                       }
@@ -539,7 +551,7 @@ export default function AjustesPage() {
                       type="time"
                       className="w-28"
                       value={b.fin}
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                       onChange={(e) =>
                         editarBloque(a, i, { fin: e.target.value })
                       }
@@ -548,13 +560,13 @@ export default function AjustesPage() {
                     <Input
                       className="w-48 flex-1"
                       value={b.curso}
-                      disabled={!esAdmin}
+                      disabled={!puedeEditarHorario}
                       onChange={(e) =>
                         editarBloque(a, i, { curso: e.target.value })
                       }
                       aria-label="Curso"
                     />
-                    {esAdmin && (
+                    {puedeEditarHorario && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -565,7 +577,7 @@ export default function AjustesPage() {
                     )}
                   </div>
                 ))}
-                {esAdmin && (
+                {puedeEditarHorario && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -581,7 +593,7 @@ export default function AjustesPage() {
           <div>
             <Button
               onClick={guardarHorario}
-              disabled={!esAdmin || !horarioBorrador}
+              disabled={!puedeEditarHorario || !horarioBorrador}
             >
               Guardar horario
             </Button>

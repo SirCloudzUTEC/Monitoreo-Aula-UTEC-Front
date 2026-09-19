@@ -68,7 +68,7 @@ npm run start -- --hostname 127.0.0.1 --port 3101
 E2E_EMAIL=... E2E_PASSWORD=... npm run test:e2e
 ```
 
-`E2E_EMAIL`/`E2E_PASSWORD` deben ser una cuenta aprobada del backend (un superusuario cubre todas las pantallas), y `CORS_ALLOWED_ORIGINS` del backend debe incluir `http://127.0.0.1:3101`. Playwright usa Chrome instalado en local; en CI, Chromium (`npx playwright install --with-deps chromium`). `UTEC_BASE_URL` permite elegir otra instancia **de pruebas**, sin apuntar a producción. `scripts/contract-smoke.mjs` verifica el formato SYS-09.2 de las mediciones contra el backend.
+`E2E_EMAIL`/`E2E_PASSWORD` deben ser una cuenta aprobada del backend (un superusuario cubre todas las pantallas), y `CORS_ALLOWED_ORIGINS` del backend debe incluir `http://127.0.0.1:3101`. Usa el **mismo host** en ambos lados: con `SameSite=Lax` la cookie de refresh solo viaja entre orígenes del mismo sitio, así que frontend en `127.0.0.1:3101` exige `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8080` (y no `localhost`), o la sesión no sobrevivirá a una recarga. Playwright usa Chrome instalado en local; en CI, Chromium (`npx playwright install --with-deps chromium`). `UTEC_BASE_URL` permite elegir otra instancia **de pruebas**, sin apuntar a producción. `scripts/contract-smoke.mjs` verifica el formato SYS-09.2 de las mediciones contra el backend.
 
 Las trazas y capturas de fallos pueden contener datos de la sesión de prueba: permanecen ignoradas en `test-results/` y no deben publicarse sin revisar.
 

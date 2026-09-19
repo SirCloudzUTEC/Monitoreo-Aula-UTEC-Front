@@ -7,6 +7,7 @@ import Link from "next/link";
 import { CalendarClockIcon, MonitorIcon, UsersIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { AvisoObsoleto } from "@/components/modules/aviso-obsoleto";
 import { getAula } from "@/lib/aulas";
 import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
 import { bloqueEnCurso, minutosRestantes, proximoBloque, DIAS_SEMANA } from "@/lib/schedule";
@@ -24,7 +25,7 @@ const MODULO_DE_MEDICION: Record<"temperatura" | "humedad" | "co2" | "ruido", Mo
 };
 
 export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
-  const { estados, valores: todos, nowMs: simNowMs } = useEstados();
+  const { estados, valores: todos, antiguedadMs, nowMs: simNowMs } = useEstados();
   const estado = estados[aula];
   const valores = todos[aula];
   const { umbrales } = useUmbrales();
@@ -62,6 +63,7 @@ export function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-base">
+        <AvisoObsoleto antiguedadMs={antiguedadMs[aula]} />
         <div className="flex items-center gap-2 text-muted-foreground">
           <CalendarClockIcon className="size-4 shrink-0" aria-hidden />
           {bloque ? (

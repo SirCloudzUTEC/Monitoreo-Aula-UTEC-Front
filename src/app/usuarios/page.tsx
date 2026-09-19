@@ -36,17 +36,22 @@ import {
   cambiarRol,
   crearUsuario,
   listarUsuarios,
+  reactivarUsuario,
   restablecerPassword,
+  type Usuario,
   suspenderUsuario,
 } from "@/lib/api/endpoints";
 import { mensajeDeError } from "@/lib/api/client";
-import { puede, type Rol } from "@/lib/auth/identity";
+import { puede, type Ambito, type Rol } from "@/lib/auth/identity";
+import { ETIQUETA_AMBITO } from "@/lib/incidents/catalog";
+import { SelectorAmbitos } from "@/app/usuarios/selector-ambitos";
+import {
+  EditarUsuario,
+  ETIQUETA_ROL,
+  ambitosPara,
+  errorDeRol,
+} from "@/app/usuarios/editar-usuario";
 
-const ETIQUETA_ROL: Record<Rol, string> = {
-  miembro: "Usuario (solo visualización)",
-  admin_operativo: "Administrador (aulas y planos)",
-  superadmin: "Superusuario (gestión de usuarios)",
-};
 
 export default function UsuariosPage() {
   const cuenta = useApp((s) => s.cuenta);
@@ -57,6 +62,8 @@ export default function UsuariosPage() {
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<Rol>("miembro");
+  const [ambitos, setAmbitos] = useState<Ambito[]>([]);
+  const [editando, setEditando] = useState<Usuario | null>(null);
   const [creada, setCreada] = useState<{ email: string; password: string } | null>(
     null,
   );
@@ -78,6 +85,7 @@ export default function UsuariosPage() {
       setNombre("");
       setEmail("");
       setRol("miembro");
+      setAmbitos([]);
       void refrescar();
     },
     onError: alFallar,
@@ -91,9 +99,18 @@ export default function UsuariosPage() {
     onError: alFallar,
   });
   const reasignarRol = useMutation({
-    mutationFn: (v: { id: number; rol: Rol }) => cambiarRol(v.id, v.rol),
+    mutationFn: (v: { id: number; rol: Rol; ambitos: Ambito[] }) => cambiarRol(v.id, v.rol, v.ambitos),
     onSuccess: () => {
-      toast.success("Rol actualizado.");
+      toast.success("Cuenta actualizada.");
+      setEditando(null);
+      void refrescar();
+    },
+    onError: alFallar,
+  });
+  const reactivar = useMutation({
+    mutationFn: reactivarUsuario,
+    onSuccess: () => {
+      toast.success("Cuenta reactivada.");
       void refrescar();
     },
     onError: alFallar,
@@ -107,7 +124,17 @@ export default function UsuariosPage() {
   const enviando = crear.isPending;
   const enviar = (e: React.FormEvent) => {
     e.preventDefault();
-    crear.mutate({ nombre: nombre.trim(), email: email.trim().toLowerCase(), rol });
+    const problema = errorDeRol(rol, ambitos);
+    if (problema) {
+      toast.error(problema);
+      return;
+    }
+    crear.mutate({
+      nombre: nombre.trim(),
+      email: email.trim().toLowerCase(),
+      rol,
+      ambitos: ambitosPara(rol, ambitos),
+    });
   };
 
   const copiar = async (texto: string) => {
@@ -225,6 +252,14 @@ export default function UsuariosPage() {
                 </SelectContent>
               </Select>
             </div>
+            {rol === "admin_operativo" && (
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label className="text-xs text-muted-foreground">
+                  Ámbitos de incidentes (al menos uno)
+                </Label>
+                <SelectorAmbitos valor={ambitos} onChange={setAmbitos} />
+              </div>
+            )}
             <div className="sm:col-span-2">
               <Button type="submit" disabled={enviando}>
                 {enviando ? "Creando…" : "Crear cuenta y generar contraseña"}
@@ -261,22 +296,14 @@ export default function UsuariosPage() {
                     <TableCell className="font-mono text-xs">{u.email}</TableCell>
                     <TableCell>{u.nombre || "—"}</TableCell>
                     <TableCell>
-                      <Select
-                        value={u.rol}
-                        disabled={u.email === cuenta?.email || reasignarRol.isPending}
-                        onValueChange={(v) => reasignarRol.mutate({ id: u.id, rol: v as Rol })}
-                      >
-                        <SelectTrigger className="w-56" aria-label={`Rol de ${u.email}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(Object.keys(ETIQUETA_ROL) as Rol[]).map((r) => (
-                            <SelectItem key={r} value={r}>
-                              {ETIQUETA_ROL[r]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div>{ETIQUETA_ROL[u.rol] ?? u.rol}</div>
+                      {u.rol === "admin_operativo" && (
+                        <div className="text-xs text-muted-foreground">
+                          {u.ambitos.length > 0
+                            ? u.ambitos.map((a) => ETIQUETA_AMBITO[a] ?? a).join(", ")
+                            : "sin ámbitos"}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="capitalize">{u.estado}</TableCell>
                     <TableCell>
@@ -284,6 +311,21 @@ export default function UsuariosPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
+                        {u.email !== cuenta?.email && (
+                          <Button size="sm" variant="outline" onClick={() => setEditando(u)}>
+                            Editar
+                          </Button>
+                        )}
+                        {u.estado === "suspendida" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={reactivar.isPending}
+                            onClick={() => reactivar.mutate(u.id)}
+                          >
+                            Reactivar
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -295,7 +337,7 @@ export default function UsuariosPage() {
                         >
                           Nueva contraseña
                         </Button>
-                        {u.estado !== "suspendida" && u.email !== cuenta?.email && (
+                        {u.estado === "aprobada" && u.email !== cuenta?.email && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -317,6 +359,14 @@ export default function UsuariosPage() {
           )}
         </CardContent>
       </Card>
+      {editando && (
+        <EditarUsuario
+          usuario={editando}
+          guardando={reasignarRol.isPending}
+          onCancelar={() => setEditando(null)}
+          onGuardar={(r, a) => reasignarRol.mutate({ id: editando.id, rol: r, ambitos: a })}
+        />
+      )}
     </div>
   );
 }

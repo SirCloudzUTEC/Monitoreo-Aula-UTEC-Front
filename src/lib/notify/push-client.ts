@@ -85,6 +85,20 @@ export async function desuscribirPush(): Promise<void> {
   await sub?.unsubscribe();
 }
 
+/**
+ * Called before signing out: drops this browser's server-side subscription and the browser
+ * subscription itself, so the account that just left stops receiving alerts on a shared computer.
+ * Best effort: a failure here must never trap the user inside the session.
+ */
+export async function liberarPushAlSalir(): Promise<void> {
+  const limite = new Promise<void>((resolve) => setTimeout(resolve, 3000));
+  try {
+    await Promise.race([desuscribirPush(), limite]);
+  } catch {
+    saveLocal("pushSubId", null);
+  }
+}
+
 const PRUEBA = {
   titulo: "Prueba · Aula Digital UTEC",
   cuerpo: "Las notificaciones push funcionan. ✓",

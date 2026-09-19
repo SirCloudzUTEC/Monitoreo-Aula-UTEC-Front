@@ -88,7 +88,8 @@ function TablaLog({ rows }: { rows: LogRow[] }) {
 
 /** CSV export walks every server page of the current filter, up to this many rows. */
 const MAX_FILAS_CSV = 10_000;
-const TAMANO_PAGINA_CSV = 500;
+/** The backend clamps `size` to 200 (EventoController); asking for more silently returns 200. */
+const TAMANO_PAGINA_CSV = 200;
 
 export default function LogPage() {
   const [aula, setAula] = useState<AulaCodigo | "todas">("todas");
@@ -137,7 +138,8 @@ export default function LogPage() {
           size: TAMANO_PAGINA_CSV,
         });
         filas.push(...r.content);
-        if ((p + 1) * TAMANO_PAGINA_CSV >= r.totalElements) break;
+        // use the size the server really applied, not the one requested
+        if (r.content.length === 0 || (p + 1) * r.size >= r.totalElements) break;
       }
       // the server returns newest first; the CSV is chronological
       const csv = exportarCsv(filas.reverse());

@@ -90,8 +90,10 @@ Contra el plan original se decidió distinto en estos puntos:
 - **`contactos` (localStorage) se mantiene**: el backend no tiene endpoint para ellos, así que no pueden "pasar a vivir en el backend" todavía.
 - **Alertas abiertas = dos consultas** (`severidad=critico` y `=alerta` con `abierto=true`) en vez de `abierto=true` a secas, porque el backend persiste los eventos `info` (ingreso, egreso, inicio_clase…) con `cerrado=false` y nunca los cierra (`ReglaEngineService.info()`); pedirlos todos traería miles de filas informativas. Conviene cerrarlos en el backend y así simplificar esta consulta.
 - **Pantalla del aula (`/pantalla/[aula]`)**: los botones verdes de "corregir" eran una acción del simulador; ahora la tarjeta en alerta muestra la acción recomendada como texto. El monitor debe tener una sesión iniciada (el backend exige JWT).
-- **Log (`/log`)**: aula y severidad se filtran en el servidor y se pagina de a 50; el cuadro de texto filtra solo la página cargada, y la "huella por actor" trabaja sobre una ventana de hasta 500 eventos (acotable por fechas). El CSV recorre todas las páginas del filtro (tope 10 000 filas).
+- **Log (`/log`)**: aula y severidad se filtran en el servidor y se pagina de a 50; el cuadro de texto filtra solo la página cargada, y la "huella por actor" trabaja sobre los 200 eventos más recientes del rango (tope de página del backend; acotable por fechas). El CSV recorre todas las páginas del filtro (tope 10 000 filas).
 - **Prueba de push**: `POST /api/push/enviar` sin `usuarioId` difunde a todos, así que "Enviar prueba" apunta al propio usuario (solo el superadmin puede resolver su id vía `GET /api/usuarios`); el resto recibe una notificación local.
 - **Reportes**: `IncidenteDto` trae `reportadoPor` (id numérico), no el correo; la tabla muestra `usuario #id`.
 - **Contrato de enums**: `tests/contract-enums.test.ts` corre solo con `UTEC_API_BASE_URL` definido (necesita el backend arriba).
 - **E2E**: reescritos contra el stack real con `E2E_EMAIL`/`E2E_PASSWORD` (ya no existe el bypass de Auth.js).
+
+- **Revisión posterior**: los hallazgos abiertos del backend y del frontend (con severidad y arreglo propuesto) están en `CORRECCIONES.md`.

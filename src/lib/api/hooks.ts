@@ -27,6 +27,7 @@ import {
   type FiltroEventos,
 } from "@/lib/api/endpoints";
 import { mensajeDeError } from "@/lib/api/client";
+import { liberarPushAlSalir } from "@/lib/notify/push-client";
 import { CODIGOS_AULA } from "@/lib/aulas";
 import { puede, type Permiso } from "@/lib/auth/identity";
 import { useApp } from "@/lib/store";
@@ -64,9 +65,18 @@ const VALORES_VACIOS = Object.fromEntries(
   CODIGOS_AULA.map((a) => [a, {} as Valores]),
 ) as Record<AulaCodigo, Valores>;
 
+/**
+ * `/estado` returns the newest reading ever stored, however old. Past this age without any new
+ * reading the room is not really being monitored (nodes publish every ~5 s), so the UI says so
+ * instead of presenting stale numbers as live.
+ */
+export const LECTURA_OBSOLETA_MS = 5 * 60_000;
+
 export interface EstadosVivos {
   estados: Record<AulaCodigo, EstadoAula>;
   valores: Record<AulaCodigo, Valores>;
+  /** Age (ms, against the server clock) of each room's newest reading; null before the first response. */
+  antiguedadMs: Record<AulaCodigo, number | null>;
   /** Backend clock (ms) at the last reading; 0 until the first response. */
   nowMs: number;
   listo: boolean;
@@ -75,14 +85,20 @@ export interface EstadosVivos {
 function combinarEstados(results: { data?: EstadoAulaVivo }[]): EstadosVivos {
   const estados = { ...ESTADOS_VACIOS };
   const valores = { ...VALORES_VACIOS };
+  const antiguedadMs = Object.fromEntries(CODIGOS_AULA.map((a) => [a, null])) as Record<
+    AulaCodigo,
+    number | null
+  >;
   let nowMs = 0;
   for (const r of results) {
     if (!r.data) continue;
     estados[r.data.aula] = r.data.estado;
     valores[r.data.aula] = r.data.valores;
+    antiguedadMs[r.data.aula] =
+      r.data.ultimaLecturaMs > 0 ? Math.max(0, r.data.tsMs - r.data.ultimaLecturaMs) : Number.POSITIVE_INFINITY;
     nowMs = Math.max(nowMs, r.data.tsMs);
   }
-  return { estados, valores, nowMs, listo: results.every((r) => r.data) };
+  return { estados, valores, antiguedadMs, nowMs, listo: results.every((r) => r.data) };
 }
 
 /** State + latest readings of every classroom, refreshed every 5 s. */
@@ -164,12 +180,12 @@ export function useEventosPagina(filtro: FiltroEventos) {
   });
 }
 
-/** Recent window of the log, used to build the actor footprint. */
+/** Most recent 200 events of the range (the backend page cap), used to build the actor footprint. */
 export function useEventosVentana(desde?: Date, hasta?: Date) {
   const habilitado = useHabilitado();
   return useQuery({
     queryKey: ["eventos", "ventana", desde?.getTime(), hasta?.getTime()],
-    queryFn: () => listarEventos({ desde, hasta, size: 500 }),
+    queryFn: () => listarEventos({ desde, hasta, size: 200 }), // backend max page size
     enabled: habilitado,
     placeholderData: keepPreviousData,
   });
@@ -229,10 +245,21 @@ export function useGuardarUmbrales() {
 export function useGuardarHorario() {
   const qc = useQueryClient();
   return useMutation({
-    // the backend replaces the full block set per classroom
-    mutationFn: (h: Horario) =>
-      Promise.all(CODIGOS_AULA.map((a) => guardarHorarioAula(a, h[a]))),
-    onSuccess: (_r, h) => qc.setQueryData(["horario"], h),
+    // The backend replaces the whole block set of ONE classroom per call, so only the classrooms
+    // that actually changed are sent; if some fail, the error names which ones.
+    mutationFn: async ({ nuevo, actual }: { nuevo: Horario; actual: Horario }) => {
+      const cambiadas = CODIGOS_AULA.filter((a) => JSON.stringify(nuevo[a]) !== JSON.stringify(actual[a]));
+      const resultados = await Promise.allSettled(cambiadas.map((a) => guardarHorarioAula(a, nuevo[a])));
+      const fallidas = cambiadas.filter((_, i) => resultados[i].status === "rejected");
+      // whatever was accepted is already live: refresh from the server either way
+      await qc.invalidateQueries({ queryKey: ["horario"] });
+      if (fallidas.length > 0) {
+        const primero = resultados.find((r) => r.status === "rejected") as PromiseRejectedResult;
+        throw new Error(
+          `No se guardó el horario de ${fallidas.join(", ")}: ${mensajeDeError(primero.reason, "error del servidor")}`,
+        );
+      }
+    },
   });
 }
 
@@ -244,6 +271,8 @@ export function useCerrarSesion() {
   const qc = useQueryClient();
   const router = useRouter();
   return async () => {
+    // needs the token, so it goes first
+    await liberarPushAlSalir();
     try {
       await logout();
     } catch {

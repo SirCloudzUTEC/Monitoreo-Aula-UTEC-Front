@@ -9,6 +9,14 @@
 //   request once.
 // - Backend errors are RFC 7807 `ProblemDetail`; they become `ApiError`.
 
+// NEXT_PUBLIC_* values are inlined at build time. A production bundle built without it would silently
+// talk to the visitor's own localhost, so fail the build/boot loudly instead of shipping that.
+if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_BASE_URL) {
+  throw new Error(
+    "Falta NEXT_PUBLIC_API_BASE_URL: define la URL HTTPS del backend en las variables de entorno del build (Vercel) o en .env.local.",
+  );
+}
+
 export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 ).replace(/\/+$/, "");
@@ -33,7 +41,10 @@ export class ApiError extends Error {
 
 /** Human-readable text for any thrown value, for toasts and inline errors. */
 export function mensajeDeError(e: unknown, porDefecto = "Ocurrió un error."): string {
-  return e instanceof ApiError ? e.message : porDefecto;
+  if (e instanceof ApiError) return e.message;
+  // plain Errors are the app's own, already-worded messages; TypeError & co. are not for users
+  if (e instanceof Error && e.name === "Error" && e.message) return e.message;
+  return porDefecto;
 }
 
 let accessToken: string | null = null;
@@ -105,21 +116,32 @@ async function enviar(path: string, o: Opciones): Promise<Response> {
 type ResultadoRefresh = "ok" | "expirada" | "sin_conexion";
 let refrescando: Promise<ResultadoRefresh> | null = null;
 
-/** One refresh at a time: concurrent 401s wait for the same round trip. */
+async function refrescar(): Promise<ResultadoRefresh> {
+  try {
+    const res = await enviar("/api/auth/refresh", { method: "POST", publico: true });
+    if (!res.ok) {
+      setAccessToken(null);
+      return "expirada";
+    }
+    const data = (await res.json()) as { accessToken: string };
+    setAccessToken(data.accessToken);
+    return "ok";
+  } catch {
+    // network failure: the session may still be valid, don't drop it
+    return "sin_conexion";
+  }
+}
+
+/**
+ * One refresh at a time. Inside a tab, concurrent 401s share the same round trip; across tabs the
+ * Web Locks API serializes them, so a second tab sends the cookie the first one just received
+ * instead of replaying the old (already rotated) one, which the backend would treat as theft.
+ */
 export function refrescarSesion(): Promise<ResultadoRefresh> {
-  refrescando ??= (async (): Promise<ResultadoRefresh> => {
+  refrescando ??= (async () => {
     try {
-      const res = await enviar("/api/auth/refresh", { method: "POST", publico: true });
-      if (!res.ok) {
-        setAccessToken(null);
-        return "expirada";
-      }
-      const data = (await res.json()) as { accessToken: string };
-      setAccessToken(data.accessToken);
-      return "ok";
-    } catch {
-      // network failure: the session may still be valid, don't drop it
-      return "sin_conexion";
+      const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+      return locks ? await locks.request("aula-digital:refresh", refrescar) : await refrescar();
     } finally {
       refrescando = null;
     }

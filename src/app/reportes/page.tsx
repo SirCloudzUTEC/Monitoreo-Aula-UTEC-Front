@@ -155,7 +155,7 @@ export default function ReportesPage() {
                       </TableCell>
                       {verTodos && (
                         <TableCell className="font-mono text-xs">
-                          usuario #{r.reportadoPor}
+                          {r.reportadoPorEmail ?? `usuario #${r.reportadoPor}`}
                         </TableCell>
                       )}
                       {verTodos && (

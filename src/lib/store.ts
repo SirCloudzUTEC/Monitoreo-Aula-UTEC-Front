@@ -60,7 +60,8 @@ export const useApp = create<AppState>((set, get) => {
     setCuenta: (cuenta) => set({ cuenta }),
     setSesionLista: () => set({ sesionLista: true }),
 
-    // Lightweight heartbeat against the backend's public health endpoint, so
+    // Lightweight heartbeat against the backend's public liveness probe (it does not touch the
+    // database, so a sleeping remote DB does not read as "no connection"), so
     // the UI goes read-only when the server is unreachable even while
     // navigator.onLine still reports true.
     probarConexion: async () => {
@@ -68,7 +69,7 @@ export const useApp = create<AppState>((set, get) => {
       try {
         if (typeof navigator !== "undefined" && !navigator.onLine)
           throw new Error("offline");
-        const response = await fetch(`${API_BASE_URL}/actuator/health`, {
+        const response = await fetch(`${API_BASE_URL}/actuator/health/liveness`, {
           cache: "no-store",
           signal: AbortSignal.timeout(5000),
         });

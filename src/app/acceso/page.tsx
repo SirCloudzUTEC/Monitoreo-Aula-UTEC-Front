@@ -2,9 +2,9 @@
 // email+password created by an administrator (never the user's real UTEC
 // credential); authentication happens against the Spring Boot backend.
 
-import Image from "next/image";
 import { ShieldCheckIcon, UsersIcon, BellRingIcon } from "lucide-react";
 import { DOMINIO_INSTITUCIONAL } from "@/lib/auth/identity";
+import { LogoUtec } from "@/components/brand/logo-utec";
 import { FormularioLogin } from "@/app/acceso/formulario-login";
 
 export const metadata = { title: "Acceso institucional — UTEC" };
@@ -13,14 +13,7 @@ export default function AccesoPage() {
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-12rem)] max-w-md flex-col items-center justify-center gap-8 py-8 text-center">
       <div className="flex flex-col items-center gap-3">
-        <Image
-          src="/brand/utec-logo.png"
-          alt="UTEC"
-          width={120}
-          height={57}
-          priority
-          className="h-12 w-auto dark:brightness-0 dark:invert"
-        />
+        <LogoUtec width={120} height={57} className="h-12 w-auto" />
         <h1 className="text-3xl font-bold tracking-tight">Campus Digital</h1>
         <p className="text-base text-muted-foreground">
           Plataforma exclusiva para la comunidad UTEC. Solo cuentas

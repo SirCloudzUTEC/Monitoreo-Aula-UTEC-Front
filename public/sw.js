@@ -1,6 +1,6 @@
 // Phase 1: cache navigated documents/assets only. API and RSC payloads are never mixed with HTML.
 const CACHE_PREFIX = "aula-digital-";
-const CACHE = `${CACHE_PREFIX}v2`;
+const CACHE = `${CACHE_PREFIX}v3`;
 const PRECACHE = [
   "/",
   "/alertas",

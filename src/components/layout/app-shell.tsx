@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import Image from "next/image";
+import { LogoUtec } from "@/components/brand/logo-utec";
 import { usePathname } from "next/navigation";
 import {
   BellIcon,
@@ -137,14 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </Button>
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <Image
-              src="/brand/utec-logo.png"
-              alt="UTEC"
-              width={72}
-              height={34}
-              priority
-              className="h-7 w-auto dark:brightness-0 dark:invert"
-            />
+            <LogoUtec width={72} height={34} className="h-7 w-auto" />
             <span className="hidden border-l pl-2 text-sm font-medium text-muted-foreground sm:inline">
               Campus Digital
             </span>

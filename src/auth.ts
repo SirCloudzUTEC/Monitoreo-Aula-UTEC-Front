@@ -9,6 +9,7 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { db } from "@/lib/data/db";
 import {
+  correoSuperadmin,
   esCorreoInstitucional,
   estadoInicial,
   rolInicial,
@@ -39,6 +40,14 @@ interface UsuarioRow {
   estado: EstadoCuenta;
 }
 
+/**
+ * There is no self-registration: every account other than the bootstrap
+ * superadmin must already exist in `usuarios`, created by an admin through
+ * `POST /api/usuarios` (which sets `rol`/`password_hash`/`estado`
+ * directly). This only ever inserts a row for `SUPERADMIN_EMAIL` — the one
+ * default account the platform bootstraps itself with — and otherwise just
+ * refreshes the display name on an existing row.
+ */
 async function upsertUsuario(
   email: string,
   nombre: string,
@@ -46,13 +55,20 @@ async function upsertUsuario(
   const sql = db();
   if (!sql) return null;
   const rol = rolInicial(email);
-  const estado = estadoInicial(rol);
-  const rows = (await sql`
-    insert into usuarios (email, nombre, rol, estado)
-    values (${email}, ${nombre}, ${rol}, ${estado})
-    on conflict (email) do update set nombre = excluded.nombre
-    returning email, nombre, rol, ambitos, estado
-  `) as UsuarioRow[];
+  const rows = (
+    rol === "superadmin"
+      ? await sql`
+          insert into usuarios (email, nombre, rol, estado)
+          values (${email}, ${nombre}, ${rol}, ${estadoInicial(rol)})
+          on conflict (email) do update set nombre = excluded.nombre
+          returning email, nombre, rol, ambitos, estado
+        `
+      : await sql`
+          update usuarios set nombre = ${nombre}
+          where email = ${email}
+          returning email, nombre, rol, ambitos, estado
+        `
+  ) as UsuarioRow[];
   const row = rows[0];
   if (!row) return null;
   return {
@@ -126,8 +142,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!esCorreoInstitucional(email)) return false;
       if (account?.provider === "google" && profile?.email_verified !== true)
         return false;
-      if (!db()) return false; // fail closed: no database, no session
-      return true;
+      const sql = db();
+      if (!sql) return false; // fail closed: no database, no session
+      // No self-registration: only the bootstrap superadmin may sign in
+      // without an existing row — everyone else must have been created by
+      // an admin first (POST /api/usuarios).
+      if (email.toLowerCase() === correoSuperadmin()) return true;
+      const rows = await sql`
+        select 1 from usuarios where email = ${email.toLowerCase()}`;
+      return rows.length > 0;
     },
     jwt: async ({ token, user }) => {
       if (user?.email) {

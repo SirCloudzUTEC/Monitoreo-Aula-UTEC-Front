@@ -1,30 +1,71 @@
-// GET /api/reportes — database status and total (no report contents:
-// members must not browse other people's reports until real auth exists).
+// GET /api/reportes — database status, total, and (only with a session)
+// the report list: own reports for a plain member, every report for an
+// account with atender_incidentes (admin_operativo/superadmin) — nobody
+// without a session, and no member browsing another member's reports.
 // POST /api/reportes — validates and stores an incident plus one
 // notification per responsible scope. Attributed to the signed-in user's
 // account when there is a session, otherwise to a shared demo account.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { sameOrigin } from "@/lib/auth/session";
 import { db } from "@/lib/data/db";
+import { puede } from "@/lib/auth/identity";
 import {
   CATALOGO_INCIDENTES,
   validarBorrador,
+  type CategoriaIncidente,
+  type PrioridadIncidente,
 } from "@/lib/incidents/catalog";
 
 const EMAIL_SISTEMA = "sistema.demo@utec.edu.pe";
+const LIMITE_LISTADO = 100;
+
+interface ReporteRow {
+  id: number;
+  categoria: CategoriaIncidente;
+  prioridad: PrioridadIncidente;
+  ubicacion: string;
+  descripcion: string;
+  estado: string;
+  creado_en: string;
+  reportado_por_email: string | null;
+}
 
 export async function GET() {
   const sql = db();
-  if (!sql) return NextResponse.json({ configurada: false, total: 0 });
+  if (!sql) return NextResponse.json({ configurada: false, total: 0, reportes: [] });
   try {
     const [{ total }] =
       await sql`select count(*)::int as total from incidentes`;
-    return NextResponse.json({ configurada: true, total });
+
+    const session = await auth();
+    let reportes: ReporteRow[] = [];
+    if (session?.cuenta) {
+      reportes = puede(session.cuenta, "atender_incidentes")
+        ? ((await sql`
+            select i.id, i.categoria, i.prioridad, i.ubicacion, i.descripcion,
+                   i.estado, i.creado_en, u.email as reportado_por_email
+            from incidentes i
+            left join usuarios u on u.id = i.reportado_por
+            order by i.creado_en desc
+            limit ${LIMITE_LISTADO}
+          `) as ReporteRow[])
+        : ((await sql`
+            select i.id, i.categoria, i.prioridad, i.ubicacion, i.descripcion,
+                   i.estado, i.creado_en, null as reportado_por_email
+            from incidentes i
+            join usuarios u on u.id = i.reportado_por
+            where u.email = ${session.cuenta.email}
+            order by i.creado_en desc
+            limit ${LIMITE_LISTADO}
+          `) as ReporteRow[]);
+    }
+    return NextResponse.json({ configurada: true, total, reportes });
   } catch {
     return NextResponse.json(
-      { configurada: false, total: 0, error: "Base de datos no disponible." },
+      { configurada: false, total: 0, reportes: [], error: "Base de datos no disponible." },
       { status: 503 },
     );
   }

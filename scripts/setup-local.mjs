@@ -10,11 +10,13 @@ if (existsSync(".env.local")) {
     `# Solo desarrollo local. No subir a Git.\nAUTH_SECRET=${secret}\n` +
       `# Completa estas dos para probar el login real con Google (ver README):\n` +
       `GOOGLE_OAUTH_CLIENT_ID=\nGOOGLE_OAUTH_CLIENT_SECRET=\n` +
-      `# Tu correo institucional arranca como superadmin:\nSUPERADMIN_EMAIL=\n`,
+      `# El único superusuario por defecto (siémbralo con npm run seed:superadmin):\n` +
+      `SUPERADMIN_EMAIL=diego.godoy.t@utec.edu.pe\n`,
     { flag: "wx" },
   );
   console.log(
-    "Configuración local creada (AUTH_SECRET generado). Completa GOOGLE_OAUTH_CLIENT_ID/SECRET " +
-      "y SUPERADMIN_EMAIL en .env.local para iniciar sesión con tu cuenta UTEC.",
+    "Configuración local creada (AUTH_SECRET generado). Completa GOOGLE_OAUTH_CLIENT_ID/SECRET, " +
+      "DATABASE_URL y corre `npm run seed:superadmin` para crear el superusuario por defecto " +
+      "(diego.godoy.t@utec.edu.pe / HolaEquipo1234).",
   );
 }

@@ -25,12 +25,14 @@ import {
   SirenIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
+  UsersIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useOnline } from "@/lib/use-online";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useApp, CODIGOS_AULA } from "@/lib/store";
+import { puede, type Permiso } from "@/lib/auth/identity";
 import { horaLarga, ETIQUETA_ESTADO, CLASE_ESTADO } from "@/lib/format";
 
 interface NavItem {
@@ -41,6 +43,8 @@ interface NavItem {
   conAlertas?: boolean;
   /** hidden from the mobile tab bar (kept in sidebar) */
   soloDesktop?: boolean;
+  /** only shown to accounts holding this permission */
+  permiso?: Permiso;
 }
 
 const NAV: NavItem[] = [
@@ -74,6 +78,13 @@ const NAV: NavItem[] = [
     icono: FileUpIcon,
     soloDesktop: true,
   },
+  {
+    href: "/usuarios",
+    etiqueta: "Usuarios",
+    icono: UsersIcon,
+    soloDesktop: true,
+    permiso: "gestionar_usuarios",
+  },
   { href: "/ajustes", etiqueta: "Ajustes", icono: Settings2Icon },
 ];
 
@@ -95,6 +106,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname.startsWith("/pantalla")) return <>{children}</>;
 
   const sinAcuse = abiertos.filter((e) => !e.acuse).length;
+  const navVisible = NAV.filter(
+    (item) => !item.permiso || (cuenta && puede(cuenta, item.permiso)),
+  );
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -203,7 +217,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         >
           <nav className="flex flex-col gap-1 p-3">
-            {NAV.map((item) => (
+            {navVisible.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -223,7 +237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               </Link>
             ))}
-            
+            <a
               href={`/pantalla/${CODIGOS_AULA[0]}`}
               target="_blank"
               rel="noopener"
@@ -242,7 +256,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* bottom tab bar (mobile) */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background md:hidden">
-        {NAV.filter((i) => !i.soloDesktop).map((item) => (
+        {navVisible.filter((i) => !i.soloDesktop).map((item) => (
           <Link
             key={item.href}
             href={item.href}

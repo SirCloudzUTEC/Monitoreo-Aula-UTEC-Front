@@ -6,7 +6,7 @@
 ┌────────────────────────── Navegador (PWA) ──────────────────────────┐
 │  UI Next.js (App Router, React 19)                                  │
 │  ├─ páginas: / /modulo /alertas /pantalla /aula /importar /log      │
-│  │            /simulador /ajustes                                   │
+│  │            /simulador /usuarios /ajustes                         │
 │  ├─ Zustand store (src/lib/store.ts)                                │
 │  │    reloj simulado (1×/10×/60×) → cada 5 s simulados:             │
 │  │    SimulatedDataSource → mediciones → RuleEngine → eventos       │
@@ -18,7 +18,8 @@
 ┌──────────────▼──────────────── Vercel (serverless) ─────────────────┐
 │  API routes *stateless* (replican el simulador determinista):       │
 │  /api/mediciones /api/serie /api/estado /api/eventos                │
-│  /api/umbrales (POST solo superadmin) /api/push/send|subscribe      │
+│  /api/umbrales (POST admin/superadmin) /api/push/send|subscribe     │
+│  /api/usuarios (crear cuentas, solo superadmin)                     │
 │  /api/auth/[...nextauth] (login Auth.js + Google)                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```

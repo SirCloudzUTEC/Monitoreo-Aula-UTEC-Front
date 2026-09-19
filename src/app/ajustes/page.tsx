@@ -290,6 +290,11 @@ export default function AjustesPage() {
               >
                 Cerrar sesión
               </Button>
+              {puede(cuenta, "gestionar_usuarios") && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/usuarios">Gestionar usuarios</Link>
+                </Button>
+              )}
               {cuenta.estado !== "aprobada" && (
                 <p className="w-full text-xs text-muted-foreground">
                   Tu cuenta está {cuenta.estado}: la administración debe
@@ -307,8 +312,9 @@ export default function AjustesPage() {
             </p>
           )}
           <p className="w-full text-xs text-muted-foreground">
-            Solo un superadmin puede editar umbrales, horario y usar el
-            simulador. La app no captura imágenes ni audio.
+            Solo una cuenta administradora o superusuaria puede editar
+            umbrales, horario y usar el simulador. La app no captura
+            imágenes ni audio.
           </p>
         </CardContent>
       </Card>
@@ -449,7 +455,8 @@ export default function AjustesPage() {
         <CardContent className="flex flex-col gap-4">
           {!esAdmin && (
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Solo lectura: necesitas una cuenta superadmin para editar.
+              Solo lectura: necesitas una cuenta administradora o superusuaria
+              para editar.
             </p>
           )}
           {GRUPOS_UMBRALES.map((g) => (

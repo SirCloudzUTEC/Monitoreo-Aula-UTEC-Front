@@ -20,24 +20,25 @@ Abre `http://localhost:3000`. `setup:local` crea `.env.local` únicamente si no 
 
 Si el archivo ya existía, completa `AUTH_SECRET`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `SUPERADMIN_EMAIL` y `DATABASE_URL` según `.env.example`; el script no lo sobrescribe. Cambiar variables requiere reiniciar el servidor.
 
-Pon tu propio correo `@utec.edu.pe` en `SUPERADMIN_EMAIL` para entrar con rol superadmin, cualquiera sea el método de login que uses.
+No hay auto-registro: pon el correo del superusuario por defecto en `SUPERADMIN_EMAIL` (`diego.godoy.t@utec.edu.pe`) y siembra esa cuenta con `npm run seed:superadmin` (crea/actualiza `diego.godoy.t@utec.edu.pe` con la contraseña `HolaEquipo1234`; cámbiala después de tu primer ingreso, y no vuelvas a correr el script sobre una base donde ya la rotaste, porque la resetea). Desde esa cuenta, en `/usuarios`, crea el resto de cuentas y asígnales rol.
 
-Google es opcional: si tu Workspace institucional bloquea crear clientes OAuth externos (`Error 403: org_internal`, común en organizaciones administradas), no hace falta — usa **Crear cuenta** en `/acceso` con tu correo `@utec.edu.pe` y una contraseña nueva (nunca tu contraseña institucional real, es un secreto propio de esta app). Si igual quieres configurar Google más adelante: crea un proyecto en [Google Cloud Console](https://console.cloud.google.com), pantalla de consentimiento "Externo" en modo Prueba (sin dominio ni logo, solo agrega tu correo en "Test users"), y registra la redirect URI `http://localhost:3000/api/auth/callback/google`.
+Google es opcional: si tu Workspace institucional bloquea crear clientes OAuth externos (`Error 403: org_internal`, común en organizaciones administradas), no hace falta — usa **correo y contraseña** en `/acceso`. Si igual quieres configurar Google más adelante: crea un proyecto en [Google Cloud Console](https://console.cloud.google.com), pantalla de consentimiento "Externo" en modo Prueba (sin dominio ni logo, solo agrega tu correo en "Test users"), y registra la redirect URI `http://localhost:3000/api/auth/callback/google`. Google solo sirve para iniciar sesión en una cuenta que ya existe — tampoco crea cuentas nuevas.
 
 ### Login institucional y permisos
 
-El acceso es por cuenta real, restringida a `@utec.edu.pe`; no hay PIN compartido. Dos formas de entrar, intercambiables sobre la misma cuenta:
+El acceso es por cuenta real, restringida a `@utec.edu.pe`; no hay PIN compartido ni registro abierto. Toda cuenta la crea un superusuario desde `/usuarios` (correo, nombre y rol; el servidor genera la contraseña y la muestra una sola vez para que se le entregue a esa persona) — la única excepción es el superusuario por defecto de `SUPERADMIN_EMAIL`, que se autocrea en su primer login. Dos formas de entrar, intercambiables sobre la misma cuenta:
 
-- **Correo y contraseña** (`/acceso/registro` para crear la cuenta): la contraseña es propia de la app (hash scrypt con sal, nunca en texto plano), no la contraseña institucional. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.
-- **Google** (opcional, solo si `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` están configurados). Sin esas variables, `/acceso` simplemente no muestra el botón de Google en vez de uno roto.
+- **Correo y contraseña**: la contraseña es propia de la app (hash scrypt con sal, nunca en texto plano), no la contraseña institucional. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.
+- **Google** (opcional, solo si `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` están configurados). Sin esas variables, `/acceso` simplemente no muestra el botón de Google en vez de uno roto. Solo funciona sobre una cuenta que ya exista en `usuarios`; el login se rechaza para cualquier otro correo institucional.
 
-- **miembro** (rol por defecto al primer login): lectura, reportar incidente, recibir alertas.
-- **admin_operativo**: además, atender incidentes (acusar recibo).
-- **superadmin** (solo la cuenta en `SUPERADMIN_EMAIL`, auto-aprobada): además, editar umbrales/horario, usar el Simulador, guardar plano importado y enviar push de prueba.
-- Toda cuenta nueva que no sea la superadmin queda **pendiente** sin permisos hasta aprobarse manualmente en la base de datos (`usuarios.estado`); el panel de aprobación es una tarea aparte, fuera de esta fase.
+Roles, de menor a mayor alcance:
+
+- **miembro** — usuario normal: solo visualización (además de reportar incidentes y recibir alertas).
+- **admin_operativo** — administrador: además, atender incidentes, crear/editar aulas, actualizar planos importados, umbrales, horario y usar el Simulador.
+- **superadmin** — superusuario: todo lo anterior, más crear cuentas nuevas y asignarles rol desde `/usuarios`, y gestionar integraciones.
 - Las escrituras del cliente revalidan la sesión contra el servidor antes de aplicarse; las API protegidas nunca confían en el estado local.
 
-**No usar para decisiones operativas, acceso físico ni datos privados hasta que UTEC confirme el proveedor de identidad institucional y exista el panel de aprobación de cuentas.**
+**No usar para decisiones operativas, acceso físico ni datos privados hasta que UTEC confirme el proveedor de identidad institucional.**
 
 ## Ejecutar en local
 
@@ -73,6 +74,9 @@ Las trazas y capturas de fallos pueden contener datos de la sesión de prueba: p
 | `/log`             | Filtros y CSV de diez columnas                        |
 | `/simulador`       | Escenarios, velocidad y eventos manuales              |
 | `/importar`        | Contorno CSV, DXF o JSON con vista previa             |
+| `/reportar`        | Reportar un incidente (categoría, ubicación, descripción) |
+| `/reportes`        | Ver reportes: propios, o todos con `atender_incidentes` |
+| `/usuarios`        | Crear cuentas y asignar rol (solo superusuario)       |
 | `/ajustes`         | Sesión, umbrales, horario, contactos y notificaciones |
 
 Se conservan redirecciones desde `/dashboard`, `/configuracion`, `/footprint`, `/aulas/:aulaId` y `/login`.
@@ -101,7 +105,7 @@ En el proyecto Vercel, selecciona Next.js y configura las variables para el ento
 | `DATABASE_URL`                 | Conexión Neon/Postgres; sin ella el login falla cerrado (no hay dónde guardar cuentas) |
 | `GOOGLE_OAUTH_CLIENT_ID`       | Opcional. Cliente OAuth de Google Cloud Console, redirect URI de este entorno          |
 | `GOOGLE_OAUTH_CLIENT_SECRET`   | Opcional. Secreto del cliente OAuth; solo servidor                                     |
-| `SUPERADMIN_EMAIL`             | Correo `@utec.edu.pe` que arranca aprobado como superadmin                             |
+| `SUPERADMIN_EMAIL`             | Correo `@utec.edu.pe` del superusuario por defecto (siémbralo con `npm run seed:superadmin`) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública, solo si se habilita push                                                |
 | `VAPID_PRIVATE_KEY`            | Clave privada push, solo servidor                                                      |
 | `VAPID_SUBJECT`                | Contacto válido `mailto:...` o `https://...`, necesario para push                      |

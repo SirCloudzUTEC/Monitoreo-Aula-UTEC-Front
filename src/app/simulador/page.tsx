@@ -1,7 +1,7 @@
 "use client";
 
-// F7 — simulator control (superadmin only): scenario per classroom,
-// speed 1×/10×/60×, pause/resume and manual event injection.
+// F7 — simulator control (admin_operativo/superadmin only): scenario per
+// classroom, speed 1×/10×/60×, pause/resume and manual event injection.
 
 import Link from "next/link";
 import {
@@ -61,8 +61,8 @@ export default function SimuladorPage() {
         />
         <h1 className="text-xl font-semibold">Simulador</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Esta sección es solo para cuentas <strong>superadmin</strong>.
-          Revisa tu cuenta en{" "}
+          Esta sección es solo para cuentas{" "}
+          <strong>administrador o superusuario</strong>. Revisa tu cuenta en{" "}
           <Link href="/ajustes" className="underline">
             Ajustes
           </Link>

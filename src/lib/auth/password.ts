@@ -48,6 +48,15 @@ export async function verifyPassword(
   return derived.length === expected.length && timingSafeEqual(derived, expected);
 }
 
+/** Generates a random app-specific password for an account an admin
+ * creates through `POST /api/usuarios`. Returned once in that response so
+ * the admin can hand it to the new user out of band; never logged or
+ * stored anywhere except as its scrypt hash. 12 random bytes as base64url
+ * (16 characters) always clears `fortalezaPassword`. */
+export function generarPasswordTemporal(): string {
+  return randomBytes(12).toString("base64url");
+}
+
 /** Constant-shape dummy verification so a nonexistent account's login takes
  * about as long as a real one — otherwise timing reveals which emails are
  * registered. */

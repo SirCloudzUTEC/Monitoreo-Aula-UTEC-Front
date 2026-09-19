@@ -18,7 +18,10 @@ export async function POST(req: NextRequest) {
     !session?.cuenta ||
     !puede(session.cuenta, "gestionar_dispositivos")
   )
-    return NextResponse.json({ error: "Solo un superadmin." }, { status: 403 });
+    return NextResponse.json(
+      { error: "Solo una cuenta administradora o superusuaria." },
+      { status: 403 },
+    );
   const body: unknown = await req.json().catch(() => null);
   if (!isRecord(body) || !validSubscription(body.subscription))
     return NextResponse.json(

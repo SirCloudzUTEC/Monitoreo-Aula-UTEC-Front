@@ -51,9 +51,10 @@ export function rolInicial(email: string): Rol {
 }
 
 /**
- * New accounts other than the superadmin start pending until approved.
- * The superadmin account is approved automatically so the platform can
- * be bootstrapped without a second operator.
+ * Only used to bootstrap the single default superadmin (`SUPERADMIN_EMAIL`)
+ * on its first sign-in — every other account is created already
+ * `aprobada` by an admin through `POST /api/usuarios`, since there is no
+ * self-registration anymore.
  */
 export function estadoInicial(rol: Rol): EstadoCuenta {
   return rol === "superadmin" ? "aprobada" : "pendiente";
@@ -69,20 +70,26 @@ export type Permiso =
   | "gestionar_integraciones";
 
 const PERMISOS_BASE: Record<Rol, readonly Permiso[]> = {
+  // Usuario normal: solo visualización (más reportar y recibir alertas).
   miembro: ["ver_datos_autorizados", "reportar_incidente", "recibir_alertas"],
+  // Administrador: además, atiende incidentes y gestiona aulas (crear
+  // aulas, actualizar planos, umbrales, horario, Simulador).
   admin_operativo: [
     "ver_datos_autorizados",
     "reportar_incidente",
     "recibir_alertas",
     "atender_incidentes",
+    "gestionar_dispositivos",
   ],
+  // Superusuario: todo lo anterior, más gestionar cuentas (crear usuarios
+  // y asignarles rol) e integraciones.
   superadmin: [
     "ver_datos_autorizados",
     "reportar_incidente",
     "recibir_alertas",
     "atender_incidentes",
-    "gestionar_usuarios",
     "gestionar_dispositivos",
+    "gestionar_usuarios",
     "gestionar_integraciones",
   ],
 };

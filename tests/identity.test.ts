@@ -75,10 +75,11 @@ describe("permissions", () => {
     expect(puede(c, "gestionar_usuarios")).toBe(false);
   });
 
-  it("operational admins additionally attend incidents", () => {
+  it("operational admins additionally attend incidents and manage classrooms/devices, but not users", () => {
     const c = cuenta({ rol: "admin_operativo", ambitos: ["seguridad"] });
     expect(puede(c, "atender_incidentes")).toBe(true);
-    expect(puede(c, "gestionar_dispositivos")).toBe(false);
+    expect(puede(c, "gestionar_dispositivos")).toBe(true);
+    expect(puede(c, "gestionar_usuarios")).toBe(false);
   });
 
   it("superadmin manages users, devices and integrations", () => {

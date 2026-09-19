@@ -53,8 +53,8 @@ export default function AccesoPage() {
         <li className="flex items-start gap-3">
           <ShieldCheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
           <span>
-            Las cuentas nuevas quedan <strong>pendientes de aprobación</strong>{" "}
-            por la administración antes de acceder a los datos.
+            No hay registro abierto: un administrador crea tu cuenta y te
+            entrega la contraseña.
           </span>
         </li>
         <li className="flex items-start gap-3">

@@ -1,6 +1,6 @@
 // GET /api/umbrales — default comfort parameters (SysML seed values).
 // POST /api/umbrales — validates a threshold update; only accounts with
-// gestionar_dispositivos (superadmin) may write.
+// gestionar_dispositivos (admin_operativo/superadmin) may write.
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     !puede(session.cuenta, "gestionar_dispositivos")
   ) {
     return NextResponse.json(
-      { error: "Solo un superadmin puede modificar umbrales." },
+      { error: "Solo una cuenta administradora o superusuaria puede modificar umbrales." },
       { status: 403 },
     );
   }

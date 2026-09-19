@@ -8,17 +8,18 @@ un servidor con esa configuración real.
 
 - PIN compartido eliminado por completo (memoria `no-shared-pin-auth.md`).
 - Auth.js / NextAuth v5 (`next-auth@5.0.0-beta.32`), provider Google, sesión JWT sin adapter de base de datos.
-- Mapeo de permisos (reemplaza el gate binario `rol === "administrador"` de antes):
+- Mapeo de permisos (reemplaza el gate binario `rol === "administrador"` de antes; actualizado en la sección de abajo tras eliminar el auto-registro):
 
   | Acción | Gate | Quién puede |
   |---|---|---|
-  | Editar umbrales, horario, Simulador, guardar plano importado | `puede(cuenta, "gestionar_dispositivos")` | solo `superadmin` |
-  | Enviar push de prueba | `puede(cuenta, "gestionar_dispositivos")` | solo `superadmin` |
+  | Editar umbrales, horario, Simulador, guardar plano importado | `puede(cuenta, "gestionar_dispositivos")` | `admin_operativo` y `superadmin` |
+  | Enviar push de prueba | `puede(cuenta, "gestionar_dispositivos")` | `admin_operativo` y `superadmin` |
   | Suscribirse a push (recibir alertas) | `puede(cuenta, "recibir_alertas")` | cualquier cuenta `aprobada` |
   | Acusar recibo de alerta | `puede(cuenta, "atender_incidentes")` | `admin_operativo` y `superadmin` |
+  | Crear cuentas y asignarles rol | `puede(cuenta, "gestionar_usuarios")` | solo `superadmin` |
   | Reportar incidente | sin cambio de acceso; se atribuye a `usuarios.id` real cuando hay sesión | cualquiera |
 
-- Fuera de alcance a propósito: panel de aprobación de cuentas pendientes (el schema ya lo soporta con `estado`/`aprobado_por`/`auditoria`). Solo `SUPERADMIN_EMAIL` se auto-aprueba.
+- Ya no está fuera de alcance: reemplaza el panel de aprobación de cuentas pendientes que se había dejado pendiente — en vez de aprobar cuentas que se autorregistran, un `superadmin` las crea directamente ya aprobadas desde `/usuarios` (ver actualización más abajo).
 
 ## Hecho y verificado
 
@@ -54,3 +55,16 @@ Plan completo original (más detalle de arquitectura, ya incorporado a `docs/DEC
 El Workspace de UTEC bloqueó crear un cliente OAuth externo (`Error 403: org_internal`), así que Google dejó de ser viable como único método para probar el login internamente. Se agregó un segundo provider (`Credentials`, id `credenciales`) con correo y contraseña propios de la app — nunca la contraseña institucional real — sobre la misma tabla `usuarios` y el mismo modelo de roles. Detalle completo, incluidas las mitigaciones contra fuerza bruta, enumeración de cuentas, CSRF, inyección SQL y XSS: `docs/DECISIONES.md` §7.
 
 Verificado en vivo contra la base Neon real de este proyecto: `POST /api/auth/registro` crea la cuenta (pendiente salvo `SUPERADMIN_EMAIL`), login con contraseña correcta abre sesión con el rol/estado reales, contraseña incorrecta nunca abre sesión, y el quinto intento fallido bloquea la cuenta 15 minutos incluso si el sexto intento usa la contraseña correcta. `npx tsc --noEmit`, `npx eslint .` y `npm test` (142/142) siguen en verde.
+
+## Actualización: se elimina el auto-registro; un superusuario crea las cuentas
+
+`POST /api/auth/registro` y `/acceso/registro` se eliminaron por completo: ya no existe una forma de que alguien se cree su propia cuenta. En su lugar hay un único superusuario por defecto, y **solo un superusuario puede crear cuentas nuevas**.
+
+- **Superusuario por defecto**: `diego.godoy.t@utec.edu.pe`, sembrado con `npm run seed:superadmin` (`scripts/seed-superadmin.mjs`, hashea `HolaEquipo1234` con el mismo esquema scrypt de `src/lib/auth/password.ts` e hace upsert directo en `usuarios`). `SUPERADMIN_EMAIL` sigue siendo la única cuenta que se autocrea al iniciar sesión (bootstrap); es la única excepción a "toda cuenta la crea un superusuario".
+- **`src/auth.ts`** — `upsertUsuario()` ya no inserta filas nuevas salvo para `SUPERADMIN_EMAIL`; para cualquier otro correo solo actualiza el nombre de una fila que ya debe existir. El callback `signIn` ahora rechaza el login (antes de llegar a `jwt`) si el correo no es el superusuario por defecto y no hay una fila en `usuarios` para ese correo — así Google tampoco puede provisionar cuentas nuevas por su cuenta.
+- **`POST /api/usuarios`** (nuevo, `gestionar_usuarios`, solo `superadmin`) — recibe `{email, nombre, rol}`, genera una contraseña aleatoria (`generarPasswordTemporal()` en `src/lib/auth/password.ts`), la hashea con scrypt y crea la cuenta ya `aprobada` (`aprobado_por`/`aprobado_en` apuntan al superusuario que la creó). Responde la contraseña en texto plano **una sola vez** en el cuerpo de la respuesta, para que el superusuario se la entregue a la persona por un canal aparte; nunca se guarda ni se vuelve a mostrar. `GET /api/usuarios` lista las cuentas (sin hashes) para el mismo permiso.
+- **`/usuarios`** (nuevo, `src/app/usuarios/page.tsx`) — formulario de creación (correo, nombre, rol) + tabla de cuentas existentes; oculto del todo (nav y contenido) para quien no tenga `gestionar_usuarios`. Enlazado desde la tarjeta de cuenta en `/ajustes` y desde la barra lateral (solo visible con el permiso).
+- **Permisos**: `admin_operativo` ahora también tiene `gestionar_dispositivos` (antes exclusivo de `superadmin`), para poder crear/editar aulas, actualizar planos, umbrales, horario y el Simulador — el rol "administrador" pedido por el producto. `gestionar_usuarios` sigue exclusivo de `superadmin`.
+- Como ya no hay auto-registro, el estado `pendiente` deja de usarse en la práctica: toda cuenta que crea un superusuario nace `aprobada`.
+
+Verificado: `npx tsc --noEmit`, `npx eslint .` y `npm test` (144/144) en verde; `npm run build` compila y `/acceso/registro` y `/api/auth/registro` ya no existen como rutas.

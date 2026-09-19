@@ -2,6 +2,11 @@
 -- Mirrors the domain rules in src/lib/auth/identity.ts and
 -- src/lib/incidents/catalog.ts. Idempotent: safe to re-run.
 
+-- No self-registration: every row other than the bootstrap superadmin
+-- (SUPERADMIN_EMAIL, first sign-in) is inserted by an existing superadmin
+-- through POST /api/usuarios, already with estado='aprobada'. 'pendiente'
+-- stays in the check constraint for schema history/compatibility but the
+-- app no longer creates rows in that state.
 create table if not exists usuarios (
   id bigint generated always as identity primary key,
   email text not null unique

@@ -19,7 +19,7 @@ Este backend reemplaza por completo esa capa. Absorbe **todas** las rutas API ac
 | `GET/POST /api/umbrales` | `GET/PUT /api/umbrales` |
 | `GET/POST /api/reportes` | `GET/POST /api/incidentes` |
 | `POST /api/push/subscribe`, `/push/send` | `POST /api/push/subscripciones`, `/push/enviar` |
-| `GET/POST /api/auth/[...nextauth]`, `/auth/registro` | `POST /api/auth/{registro,login,refresh,logout}`, `GET /api/auth/me` |
+| `GET/POST /api/auth/[...nextauth]`, `/api/usuarios` | `POST /api/auth/{login,refresh,logout}`, `GET /api/auth/me`, `GET/POST /api/usuarios` |
 
 **Fuera de alcance, a propósito:** `/api/asistente` (el chat-asistente, hoy un stub que siempre responde 501) se queda tal cual en Next.js. No se migra.
 
@@ -100,19 +100,20 @@ Todas las respuestas de error usan `ProblemDetail` (RFC 7807). La columna "Permi
 
 ### Autenticación
 
+No hay auto-registro: no existe un endpoint público para crear una cuenta. La única cuenta que se crea sola es el superusuario por defecto (equivalente a `SUPERADMIN_EMAIL` hoy), sembrado una vez con un script/migración de arranque. Todas las demás cuentas las crea un `superadmin` con `POST /api/usuarios`.
+
 | Método | Ruta | Permiso | Notas |
 |---|---|---|---|
-| POST | `/api/auth/registro` | público | `{email, nombre, password}`; solo `@utec.edu.pe`, reglas de fortaleza de `fortalezaPassword` portadas; 409 genérico igual exista con o sin contraseña (anti-enumeración) |
-| POST | `/api/auth/login` | público | `{email, password}`; setea cookie httpOnly `refresh_token`, responde `{accessToken, cuenta}` |
+| POST | `/api/auth/login` | público | `{email, password}`; setea cookie httpOnly `refresh_token`, responde `{accessToken, cuenta}`; rechaza el login si la cuenta no existe |
 | POST | `/api/auth/refresh` | público (cookie) | rota el refresh token, responde `{accessToken}` nuevo |
 | POST | `/api/auth/logout` | autenticado | revoca el refresh token actual, limpia la cookie |
 | GET | `/api/auth/me` | autenticado | `CuentaUsuario` fresca |
-| GET | `/api/usuarios?estado=pendiente` | `gestionar_usuarios` | lista cuentas pendientes de aprobar |
-| POST | `/api/usuarios/{id}/aprobar` | `gestionar_usuarios` | `estado='aprobada'`, `aprobado_por`, `aprobado_en` |
+| GET | `/api/usuarios` | `gestionar_usuarios` | lista cuentas (`email`, `nombre`, `rol`, `estado`, `creado_en`; nunca `password_hash`) |
+| POST | `/api/usuarios` | `gestionar_usuarios` | `{email, nombre, rol}`; solo `@utec.edu.pe`, genera una contraseña aleatoria, la hashea y crea la cuenta ya `estado='aprobada'` con `aprobado_por`/`aprobado_en`; responde `{email, password}` con la contraseña en texto plano **una sola vez**; 409 genérico si el correo ya existe |
 | POST | `/api/usuarios/{id}/suspender` | `gestionar_usuarios` | `estado='suspendida'`, incrementa `token_version` |
 | PUT | `/api/usuarios/{id}/rol` | `gestionar_usuarios` | `{rol, ambitos}`, incrementa `token_version` |
 
-`gestionar_usuarios` existe en el modelo de permisos desde hace tiempo sin un solo endpoint que lo use — sin este mínimo, las cuentas `pendiente` son un callejón sin salida que solo se resuelve editando la base a mano. Se construye ahora, chico (4 endpoints); un panel completo de administración de usuarios queda fuera de alcance.
+`gestionar_usuarios` es lo único que permite crear cuentas ahora que no hay auto-registro — sin este mínimo (ya construido en el frontend actual, `src/app/api/usuarios/route.ts` + `src/app/usuarios/page.tsx`), un `superadmin` tendría que insertar filas a mano en la base. Suspender y cambiar de rol una cuenta existente quedan como los dos endpoints adicionales mínimos; un panel completo de administración de usuarios (edición masiva, historial, etc.) queda fuera de alcance.
 
 ### Aulas y configuración
 
@@ -202,7 +203,7 @@ Se porta `src/lib/rules/engine.ts` casi 1:1 — el diseño actual ya es lógica 
 - **Dónde guarda el token el frontend** (detalle completo en `docs/MIGRACION_FRONTEND_BACKEND.md`): refresh token en **cookie httpOnly + Secure** del dominio del backend (JS del navegador nunca la toca — un XSS puede robar el access token de memoria pero no la credencial de larga vida); access token devuelto en el cuerpo JSON del login/refresh y guardado **solo en memoria** del lado del frontend (nunca localStorage), enviado como `Authorization: Bearer` en cada request, renovado en silencio vía `/api/auth/refresh` ante un 401 o al cargar la página. Si frontend (Vercel) y backend terminan en dominios distintos, la cookie necesita `SameSite=None; Secure`, lo que debilita la protección CSRF de `SameSite` casi a cero — la defensa real pasa entonces a ser (a) un allowlist CORS estricto con `allowCredentials=true` sin comodín, más (b) exigir un header custom (ej. `X-Client: web`) en cada request de escritura, que un `<form>` cross-site (el vector clásico de CSRF) no puede replicar porque no puede setear headers custom — es el mismo espíritu que el `sameOrigin()` que ya existe hoy, adaptado a un escenario cross-origin.
 - **Hash de contraseña: Argon2id**, vía `Argon2PasswordEncoder` de Spring Security envuelto en `DelegatingPasswordEncoder` (prefijo `{argon2}`, para poder cambiar de algoritmo después sin migración dura). Argon2id sobre BCrypt porque es la recomendación vigente de OWASP (memory-hard, resistente a GPU/ASIC) y esto es una implementación desde cero, no una migración de hashes legados. **Los hashes `scrypt:...` de Next.js no son compatibles** — con solo un puñado de cuentas de prueba existentes hoy, lo pragmático es un reseteo único: vaciar `password_hash` de las cuentas preexistentes y forzar un flujo de "establecer contraseña" en el primer login tras el corte, en vez de construir un verificador de compatibilidad scrypt para datos que apenas existen.
 - **Bloqueo / anti-enumeración**: se reutilizan `usuarios.intentos_fallidos`/`bloqueado_hasta` directo — incrementa al fallar, bloquea 15 minutos al quinto fallo, resetea al acertar. Se corre una verificación Argon2 de forma/tiempo constante incluso para un correo inexistente (contra un hash señuelo fijo), y siempre se responde el mismo mensaje genérico — puerto directo de `verificarConSenuelo`.
-- **Rate limiting**: Bucket4j en memoria (sin Redis, instancia única) sobre `/api/auth/login` (por IP+correo), `/api/auth/registro` (por IP), `POST /api/incidentes` (por usuario, anti-spam), y la tasa de ingesta MQTT por dispositivo (en `MqttListener`, descartando mensajes que llegan más rápido que la cadencia documentada).
+- **Rate limiting**: Bucket4j en memoria (sin Redis, instancia única) sobre `/api/auth/login` (por IP+correo), `POST /api/usuarios` (por el `superadmin` que crea cuentas, anti-abuso), `POST /api/incidentes` (por usuario, anti-spam), y la tasa de ingesta MQTT por dispositivo (en `MqttListener`, descartando mensajes que llegan más rápido que la cadencia documentada).
 - **Mapeo de autorización**: cada `Permiso` es un `GrantedAuthority`; los controladores usan `@PreAuthorize("hasAuthority('gestionar_dispositivos')")`, etc. Los permisos se calculan en el login a partir de `rol`+`estado` (misma regla que `permisosDe()`) y se embeben en el JWT; el chequeo de `token_version` es lo que mantiene una suspensión efectiva de inmediato pese al TTL de 15 minutos del token.
 
 ## 10. Checklist de seguridad (aplicado a este proyecto puntualmente)

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
@@ -77,10 +76,7 @@ export function FormularioLogin() {
         {enviando ? "Entrando…" : "Iniciar sesión"}
       </button>
       <p className="text-center text-xs text-muted-foreground">
-        ¿No tienes cuenta?{" "}
-        <Link href="/acceso/registro" className="underline underline-offset-4">
-          Crear cuenta
-        </Link>
+        ¿No tienes cuenta? Pídele a un administrador que te cree una.
       </p>
     </form>
   );

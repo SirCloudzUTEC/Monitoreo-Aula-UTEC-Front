@@ -41,23 +41,23 @@ Se descartó definitivamente el PIN incorporado en el bundle, el encabezado `x-r
 
 Las mutaciones locales (`useApp().autorizar(permiso)`) revalidan la cuenta contra `/api/auth/session` antes de escribir, y cada API protegida vuelve a comprobar `puede(cuenta, permiso)` con `await auth()` del lado del servidor: el cliente nunca es la fuente de verdad de sus propios permisos.
 
-Fuera de alcance a propósito por ahora: el panel de aprobación de cuentas pendientes (el schema ya soporta `estado`/`aprobado_por`/`auditoria`). Solo `SUPERADMIN_EMAIL` se auto-aprueba; el resto queda `pendiente` hasta aprobarse manualmente en la base de datos o hasta que exista ese panel.
+No hay auto-registro ni panel de aprobación de cuentas pendientes: el schema soporta `estado`/`aprobado_por`/`auditoria` desde el inicio, y ahora se usan para que un `superadmin` cree cuentas ya `aprobada` directamente desde `/usuarios` (`POST /api/usuarios`), en vez de aprobar cuentas que se autorregistraron. `SUPERADMIN_EMAIL` sigue siendo la única cuenta que se autocrea (bootstrap) al iniciar sesión por primera vez; toda otra cuenta debe existir de antemano — `src/auth.ts` rechaza el login si no.
 
 ## 7. Correo y contraseña propios de la app, junto a Google
 
-El Workspace de UTEC bloquea crear clientes OAuth externos (`Error 403: org_internal`) para cuentas gestionadas por su organización, lo que hacía inviable depender solo de Google para las pruebas internas. Se agregó un provider `Credentials` (`src/auth.ts`, id `credenciales`) con correo y contraseña **propios de la app**: nunca es la contraseña institucional real de UTEC, solo un secreto nuevo que el usuario crea al registrarse (`/acceso/registro` → `POST /api/auth/registro`) y que solo desbloquea esta app. Ambos providers comparten la misma tabla `usuarios`, el mismo dominio (`esCorreoInstitucional`) y el mismo modelo de roles/estado — da igual con cuál se entró.
+El Workspace de UTEC bloquea crear clientes OAuth externos (`Error 403: org_internal`) para cuentas gestionadas por su organización, lo que hacía inviable depender solo de Google para las pruebas internas. Se agregó un provider `Credentials` (`src/auth.ts`, id `credenciales`) con correo y contraseña **propios de la app**: nunca es la contraseña institucional real de UTEC, solo un secreto que un `superadmin` genera al crear la cuenta (`POST /api/usuarios`) y que solo desbloquea esta app. Ambos providers comparten la misma tabla `usuarios`, el mismo dominio (`esCorreoInstitucional`) y el mismo modelo de roles/estado — da igual con cuál se entró.
 
 Medidas contra los riesgos propios de un login con contraseña:
 
 - **Hash**: `scrypt` (módulo `node:crypto`, sin dependencia externa) con sal aleatoria por cuenta — `src/lib/auth/password.ts`.
 - **Fuerza mínima**: 10+ caracteres, rechaza la contraseña igual al correo y una lista corta de contraseñas obviamente débiles (`fortalezaPassword`).
 - **Fuerza bruta**: bloqueo de la cuenta 15 minutos tras 5 intentos fallidos (`intentos_fallidos`/`bloqueado_hasta` en `usuarios`), reseteado solo en un login correcto.
-- **Enumeración de cuentas**: correo inexistente, cuenta sin contraseña (solo-Google) y contraseña incorrecta hacen una verificación señuelo de duración equivalente (`verificarConSenuelo`) antes de responder, para que el tiempo de respuesta no delate cuál de los tres casos ocurrió. El registro responde el mismo 409 genérico si el correo ya existe, con o sin contraseña.
-- **CSRF**: el login usa el flujo estándar de Auth.js (token de doble envío); `POST /api/auth/registro` exige `sameOrigin()`, igual que el resto de las API de escritura.
+- **Enumeración de cuentas**: correo inexistente, cuenta sin contraseña (solo-Google) y contraseña incorrecta hacen una verificación señuelo de duración equivalente (`verificarConSenuelo`) antes de responder, para que el tiempo de respuesta no delate cuál de los tres casos ocurrió. `POST /api/usuarios` responde el mismo 409 genérico si el correo ya existe.
+- **CSRF**: el login usa el flujo estándar de Auth.js (token de doble envío); `POST /api/usuarios` exige `sameOrigin()` y `gestionar_usuarios`, igual que el resto de las API de escritura.
 - **Inyección SQL**: toda consulta usa el *tagged template* `sql` de `@neondatabase/serverless`, nunca concatenación de texto.
 - **XSS**: no hay `dangerouslySetInnerHTML` en el proyecto; nombre y correo se muestran siempre como texto JSX, escapado por React.
 
-Verificado en vivo contra Neon: registro crea la cuenta `pendiente`, login con la contraseña correcta abre sesión con el rol/estado reales, la contraseña incorrecta nunca abre sesión, y al quinto intento fallido la cuenta queda bloqueada incluso probando la contraseña correcta.
+Verificado en vivo contra Neon: `POST /api/usuarios` crea la cuenta ya `aprobada` con una contraseña generada por el servidor, login con la contraseña correcta abre sesión con el rol/estado reales, la contraseña incorrecta nunca abre sesión, y al quinto intento fallido la cuenta queda bloqueada incluso probando la contraseña correcta.
 
 ## 7. Eventos inyectados se cierran con el acuse
 
@@ -92,3 +92,11 @@ El checkpoint no incluye permisos. Las cuotas de almacenamiento, borrados del us
 ## 12. Modo offline de lectura
 
 `navigator.onLine` no demuestra que el servidor esté disponible. La respuesta de `/api/session` complementa esa señal; mientras no se confirme conectividad, el reloj permanece congelado y no se permiten mutaciones. Se conservan las lecturas guardadas, no se simulan nuevas lecturas durante una desconexión detectada. La emulación de navegador verifica caché, recarga, reloj congelado y reconexión; no sustituye las pruebas físicas en todos los dispositivos.
+
+## 13. Sin auto-registro: un superusuario provisiona las cuentas
+
+Se eliminó `/acceso/registro` y `POST /api/auth/registro`: nadie puede crearse su propia cuenta. En su lugar hay un único superusuario por defecto (`SUPERADMIN_EMAIL`, sembrado con `npm run seed:superadmin`) que es la única cuenta que se autocrea al iniciar sesión por primera vez (bootstrap). `src/auth.ts` rechaza el login de cualquier otro correo institucional que no tenga ya una fila en `usuarios` — ni Google ni el provider de credenciales pueden provisionar cuentas nuevas por su cuenta.
+
+Ese superusuario crea el resto de cuentas desde `/usuarios` (`POST /api/usuarios`, permiso `gestionar_usuarios`): elige el correo, el nombre y el rol, y el servidor genera una contraseña aleatoria que se muestra una sola vez en la respuesta para que se le entregue a esa persona por un canal aparte. La cuenta nace ya `aprobada` — no hay estado `pendiente` que aprobar después, porque ya pasó por un superusuario al crearse.
+
+Se aprovechó el cambio para separar mejor los tres roles: `miembro` (usuario normal, solo visualización + reportar/recibir alertas), `admin_operativo` (administrador: además atiende incidentes y gestiona aulas — crear aulas, actualizar planos, umbrales, horario, Simulador — permiso que antes era exclusivo de `superadmin`) y `superadmin` (superusuario: todo lo anterior más crear cuentas e integraciones). Antes, cualquier correo `@utec.edu.pe` que iniciara sesión con Google terminaba con una fila `miembro`/`pendiente` en la base sin que nadie lo hubiera decidido; ahora cada cuenta existe porque un superusuario la creó a propósito, con el rol que decidió.

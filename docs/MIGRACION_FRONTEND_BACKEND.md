@@ -18,7 +18,7 @@ Hoy el frontend simula todo del lado del navegador (motor de reglas, generador d
 **Todo el login construido en Next.js** (Spring Boot pasa a ser la única fuente de verdad de usuarios/JWT):
 - `src/auth.ts` y Auth.js/NextAuth completo (provider Google, provider Credentials, provider de bypass de test, estrategia de sesión JWT propia de NextAuth)
 - `src/app/api/auth/[...nextauth]/route.ts`
-- `src/app/api/auth/registro/route.ts`, `src/lib/auth/credentials.ts`, `src/lib/auth/password.ts` (el módulo de correo/contraseña recién construido — su lógica se porta al backend, ver `BACKEND_SPRINGBOOT.md` §9)
+- `src/app/api/usuarios/route.ts`, `src/app/usuarios/page.tsx`, `src/lib/auth/credentials.ts`, `src/lib/auth/password.ts` (el módulo de correo/contraseña y creación de cuentas por un superusuario — su lógica se porta al backend, ver `BACKEND_SPRINGBOOT.md` §6/§9)
 - `src/components/session-provider.tsx` (el `SessionProvider` de `next-auth/react`)
 
 **Las rutas API que Spring Boot absorbe** (ver la tabla de equivalencias en `BACKEND_SPRINGBOOT.md` §1):
@@ -35,7 +35,7 @@ Hoy el frontend simula todo del lado del navegador (motor de reglas, generador d
 ## 3. Qué se agrega o reemplaza
 
 - **Capa de cliente API** (`src/lib/api/client.ts`, nuevo) — wrapper sobre `fetch` que lee `NEXT_PUBLIC_API_BASE_URL`, adjunta `Authorization: Bearer` desde un holder de token en memoria (no persistido), y ante un 401 intenta exactamente un `POST /api/auth/refresh` silencioso (con `credentials: 'include'` para que viaje la cookie httpOnly) antes de reintentar la request original. Traduce los `ProblemDetail` del backend a errores tipados que el resto de la app puede mostrar.
-- **Flujo de auth nuevo** — los formularios de login/registro (`src/app/acceso/*`) pasan a hacer `POST` directo contra el backend (vía el cliente de arriba) en vez de `next-auth/react`'s `signIn()`. El access token se guarda **solo en memoria** (un slice chico de Zustand o un `React.Context`, nunca `localStorage` ni `sessionStorage` — así un XSS no puede robarlo leyendo storage), el refresh token vive exclusivamente en la cookie httpOnly que setea el backend (el frontend nunca la lee ni la toca directamente). `logout` llama a `POST /api/auth/logout` y limpia el token en memoria.
+- **Flujo de auth nuevo** — el formulario de login (`src/app/acceso/*`) y el panel de creación de cuentas (`src/app/usuarios/*`, solo `superadmin`) pasan a hacer `POST` directo contra el backend (vía el cliente de arriba) en vez de `next-auth/react`'s `signIn()`. El access token se guarda **solo en memoria** (un slice chico de Zustand o un `React.Context`, nunca `localStorage` ni `sessionStorage` — así un XSS no puede robarlo leyendo storage), el refresh token vive exclusivamente en la cookie httpOnly que setea el backend (el frontend nunca la lee ni la toca directamente). `logout` llama a `POST /api/auth/logout` y limpia el token en memoria.
 - **Zustand (`src/lib/store.ts`) se reduce de tamaño y de responsabilidad**: deja de conducir el loop de simulación (`iniciar()`, `tickReal`, `procesarBucket`, el motor y el `dataSource` a nivel de módulo desaparecen por completo). Lo que queda: `cuenta`/`setCuenta` (ahora poblado por el cliente de auth nuevo, no por `next-auth/react`'s `useSession()`), y las preferencias puramente de UI (`sonido`, `prefsAulas`).
 - **`@tanstack/react-query`** (dependencia nueva) para los datos que antes venían de la simulación: reemplaza el loop de tick hecho a mano por polling con caché/revalidación, que es exactamente su trabajo — hacerlo a mano en Zustand (como el loop actual) es estrictamente más código de mantener para este alcance. Intervalos sugeridos: 5s para el estado/lecturas actuales del dashboard (misma cadencia que los sensores), 15-30s para el log de eventos/alertas (menos sensible a latencia).
 - **Componentes que se tocan** (pasan de leer `useApp`'s estado simulado a usar hooks de react-query contra la nueva API):
@@ -76,5 +76,5 @@ Hoy el frontend simula todo del lado del navegador (motor de reglas, generador d
 
 - `npx tsc --noEmit`, `npx eslint .` y `npm test` en verde tras retirar el simulador y Auth.js (sin referencias colgantes a los módulos eliminados).
 - `npm run build` genera correctamente todas las rutas restantes (sin las que se borraron).
-- Login/registro/logout, umbrales/horario, log de eventos, acuse de alertas y reporte de incidentes probados a mano contra el backend real antes de dar el corte por cerrado, más `npm run test:e2e` contra el stack real.
+- Login/creación de cuentas/logout, umbrales/horario, log de eventos, acuse de alertas y reporte de incidentes probados a mano contra el backend real antes de dar el corte por cerrado, más `npm run test:e2e` contra el stack real.
 - Confirmar que `git grep -n "@neondatabase/serverless\|next-auth"` no devuelve nada en `src/` tras el corte, y que `package.json` ya no las lista como dependencias.

@@ -11,6 +11,7 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "setup:local": "node scripts/setup-local.mjs",
+    "seed:superadmin": "node scripts/seed-superadmin.mjs",
     "format": "prettier --write src tests scripts *.ts *.mts *.mjs"
   },
   "dependencies": {

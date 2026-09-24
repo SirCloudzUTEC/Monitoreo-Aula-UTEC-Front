@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PlanoSvg, type PlanoImportado } from "@/components/plano/plano-svg";
+import { TwinViewer } from "@/components/three/twin-viewer";
 import { CODIGOS_AULA, getAula } from "@/lib/aulas";
 import { AvisoObsoleto } from "@/components/modules/aviso-obsoleto";
 import { useEstados } from "@/lib/api/hooks";
@@ -37,6 +38,7 @@ export default function AulaPage() {
   const estado = valido ? estados[codigo] : "Cerrada";
   const valores = valido ? todos[codigo] : undefined;
   const [plano, setPlano] = useState<PlanoImportado | null>(null);
+  const [verPlano2D, setVerPlano2D] = useState(false);
 
   useEffect(() => {
     // localStorage is client-only: it must be read after mount (SSR renders null)
@@ -59,16 +61,10 @@ export default function AulaPage() {
             {ETIQUETA_ESTADO[estado]}
           </span>
           <a
-            href={`/aula/${codigo}/3d`}
-            className="ml-auto rounded-md bg-primary px-3 py-1 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            Vista 3D
-          </a>
-          <a
             href={`/pantalla/${codigo}`}
             target="_blank"
             rel="noopener"
-            className="text-sm text-muted-foreground underline hover:text-foreground"
+            className="ml-auto text-sm text-muted-foreground underline hover:text-foreground"
           >
             Ver pantalla TV ↗
           </a>
@@ -90,24 +86,39 @@ export default function AulaPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xl">Plano 2D</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PlanoSvg aula={aula} plano={plano} className="w-full" />
-          <p className="mt-3 text-sm text-muted-foreground">
-            {plano
-              ? `Contorno importado (${plano.origen ?? "archivo"}${plano.nombre ? `: ${plano.nombre}` : ""}). `
-              : "Contorno según especificación. "}
-            Puedes importar un plano CSV/DXF en{" "}
-            <Link href="/importar" className="underline">
-              Importar plano
-            </Link>
-            .
-          </p>
-        </CardContent>
-      </Card>
+      {/* primary view: the 3D twin, front and center */}
+      <TwinViewer aula={aula} embedded className="h-[70dvh] min-h-105" />
+
+      {/* hidden legacy view: 2D floor plan on demand */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setVerPlano2D((v) => !v)}
+          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          {verPlano2D ? "Ocultar plano 2D" : "Ver plano 2D (vista clásica)"}
+        </button>
+        {verPlano2D && (
+          <Card className="mt-3">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xl">Plano 2D</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PlanoSvg aula={aula} plano={plano} className="w-full" />
+              <p className="mt-3 text-sm text-muted-foreground">
+                {plano
+                  ? `Contorno importado (${plano.origen ?? "archivo"}${plano.nombre ? `: ${plano.nombre}` : ""}). `
+                  : "Contorno según especificación. "}
+                Puedes importar un plano CSV/DXF en{" "}
+                <Link href="/importar" className="underline">
+                  Importar plano
+                </Link>
+                .
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       <Card>
         <CardHeader className="pb-3">

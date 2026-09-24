@@ -78,7 +78,7 @@ export default function AulaPage() {
             Aforo: {aula.aforo} personas
           </Badge>
           <Badge variant="secondary" className="justify-center py-1.5 text-sm">
-            {aula.ventanas} ventana{aula.ventanas === 1 ? "" : "s"} · {aula.puertas} puerta
+            {aula.ventanas} ventana{aula.ventanas === 1 ? "" : "s"} · {aula.puertas} puerta{aula.puertas === 1 ? "" : "s"}
           </Badge>
           <Badge variant="secondary" className="justify-center py-1.5 text-sm">
             {aula.aireAcondicionado ? "Con aire acondicionado" : "Sin aire acondicionado"}

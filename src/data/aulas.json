@@ -36,29 +36,34 @@
     "codigo": "A-1001",
     "nombre": "Aula A-1001",
     "largo": 10,
-    "ancho": 6,
-    "alto": 3,
+    "ancho": 8,
+    "alto": 3.2,
     "aforo": 40,
-    "puertas": 1,
+    "puertas": 2,
     "ventanas": 0,
     "aireAcondicionado": false,
     "nodos": ["nodoAmbiental", "nodoPuerta", "procesadorAula"],
     "posiciones": {
-      "nodoAmbiental": { "x": 5, "y": 3 },
-      "nodoPuerta": { "x": 0.3, "y": 5.2 },
-      "procesadorAula": { "x": 9.5, "y": 5.5 },
-      "puerta": { "x": 0, "y": 5 },
-      "proyector": { "x": 5, "y": 2 },
-      "pantallaLocal": { "x": 9.7, "y": 5 }
+      "nodoAmbiental": { "x": 5.0, "y": 4.0 },
+      "nodoPuerta": { "x": 9.1, "y": 0.24 },
+      "procesadorAula": { "x": 0.35, "y": 1.1 },
+      "puerta": { "x": 9.1, "y": 0.0 },
+      "proyector": { "x": 8.05, "y": 3.95 },
+      "pantallaLocal": { "x": 9.65, "y": 7.4 }
     },
     "componentes": [
-      { "id": "proyector", "nombre": "Proyector", "cantidad": 1, "pos": { "x": 5, "y": 2 } },
-      { "id": "luminarias", "nombre": "Luminarias LED", "cantidad": 8 },
-      { "id": "computadoras", "nombre": "Computadora de docente", "cantidad": 1 },
-      { "id": "enchufes", "nombre": "Enchufes dobles", "cantidad": 6 },
-      { "id": "cajaElectrica", "nombre": "Caja eléctrica", "cantidad": 1, "pos": { "x": 9.7, "y": 0.3 } },
-      { "id": "mesas", "nombre": "Mesas", "cantidad": 20 },
-      { "id": "pantallaLocal", "nombre": "Pantalla local 24\" (HDMI)", "cantidad": 1, "pos": { "x": 9.7, "y": 5 } }
+      { "id": "pantallaInteractiva", "nombre": "Pantalla interactiva en soporte móvil", "cantidad": 1, "pos": { "x": 9.45, "y": 3.6 } },
+      { "id": "puertaFondo", "nombre": "Puerta posterior (pasillo)", "cantidad": 1, "pos": { "x": 0.9, "y": 0.0 } },
+      { "id": "pizarras", "nombre": "Pizarras acrílicas blancas", "cantidad": 2 },
+      { "id": "pantallaProyeccion", "nombre": "Pantalla de proyección enrollable", "cantidad": 1, "pos": { "x": 0.1, "y": 5.6 } },
+      { "id": "proyector", "nombre": "Proyectores", "cantidad": 2, "pos": { "x": 8.05, "y": 3.95 } },
+      { "id": "luminarias", "nombre": "Luminarias LED lineales", "cantidad": 5 },
+      { "id": "carpetas", "nombre": "Carpetas individuales", "cantidad": 40 },
+      { "id": "sillas", "nombre": "Sillas tipo trineo", "cantidad": 41 },
+      { "id": "podio", "nombre": "Podio del docente", "cantidad": 1, "pos": { "x": 8.85, "y": 7.0 } },
+      { "id": "pantallaLocal", "nombre": "Pantalla local 24\" (HDMI)", "cantidad": 1, "pos": { "x": 9.65, "y": 7.4 } },
+      { "id": "parlantes", "nombre": "Parlantes de techo", "cantidad": 2 },
+      { "id": "enchufes", "nombre": "Enchufes dobles", "cantidad": 4 }
     ]
   }
 ]

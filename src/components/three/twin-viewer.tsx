@@ -32,16 +32,22 @@ import {
 } from "@/components/three/classroom-layout";
 import { cn } from "@/lib/utils";
 
+const cargando = () => (
+  <div className="flex h-full items-center justify-center text-sm text-white/60">
+    Cargando aula 3D…
+  </div>
+);
+
 const ClassroomScene = dynamic(
   () => import("@/components/three/classroom-scene").then((m) => m.ClassroomScene),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center text-sm text-white/60">
-        Cargando aula 3D…
-      </div>
-    ),
-  },
+  { ssr: false, loading: cargando },
+);
+
+// A-1001 has its own scene modelled from its photos (a1001-scene.tsx);
+// every other aula renders through the L-419 scene and its generic layout.
+const A1001Scene = dynamic(
+  () => import("@/components/three/a1001-scene").then((m) => m.A1001Scene),
+  { ssr: false, loading: cargando },
 );
 
 const CAPA_DEFS: { id: keyof Capas; label: string; icon: typeof BoxIcon }[] = [
@@ -90,7 +96,10 @@ export function TwinViewer({
   }, []);
 
   const meta = selected ? NODO_META[selected] : null;
+  const esA1001 = aula.codigo === "A-1001";
+  const Scene = esA1001 ? A1001Scene : ClassroomScene;
   const lay = useMemo(() => buildLayout(aula), [aula]);
+  const estimada = esA1001 || lay.estimada;
 
   return (
     <div
@@ -100,7 +109,7 @@ export function TwinViewer({
         className,
       )}
     >
-      <ClassroomScene
+      <Scene
         key={sceneKey}
         aula={aula}
         capas={capas}
@@ -120,7 +129,7 @@ export function TwinViewer({
           </Link>
         )}
         <span className="rounded-full bg-[#37bbec]/15 px-2.5 py-1 text-[11px] text-[#7fd4f5] backdrop-blur">
-          Gemelo 3D{lay.estimada ? " · proporciones estimadas de fotos" : ""}
+          Gemelo 3D{estimada ? " · proporciones estimadas de fotos" : ""}
         </span>
       </div>
 

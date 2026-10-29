@@ -28,6 +28,9 @@ interface Aviso {
   texto: string;
 }
 
+/** Shown until /api/asistente lists the configured providers. */
+const PROVEEDOR_POR_DEFECTO = [{ id: "anthropic", etiqueta: "Anthropic · Claude", disponible: false }];
+
 export default function AsistentePage() {
   const [proveedores, setProveedores] = useState<ProviderOption[]>([]);
   const [proveedor, setProveedor] = useState<string>("anthropic");
@@ -129,16 +132,7 @@ export default function AsistentePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(proveedores.length > 0
-                  ? proveedores
-                  : [
-                      {
-                        id: "anthropic",
-                        etiqueta: "Anthropic · Claude",
-                        disponible: false,
-                      },
-                    ]
-                ).map((p) => (
+                {(proveedores.length > 0 ? proveedores : PROVEEDOR_POR_DEFECTO).map((p) => (
                   <SelectItem key={p.id} value={p.id} className="text-xs">
                     {etiquetaProveedor(p)}
                   </SelectItem>

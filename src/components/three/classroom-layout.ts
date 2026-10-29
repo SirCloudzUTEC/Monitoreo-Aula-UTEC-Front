@@ -109,18 +109,21 @@ export function buildLayout(aula: Aula): Layout {
   const L = aula.largo;
   const W = aula.ancho;
   const H = aula.alto;
-  const sensores: Layout["sensores"] = {};
-  if (aula.nodos.includes("nodoAmbiental")) sensores.nodoAmbiental = [L / 2, H - 0.35, W / 2];
-  if (aula.nodos.includes("nodoPuerta")) sensores.nodoPuerta = [L - 0.65, 2.3, 0.2];
-  if (aula.nodos.includes("procesadorAula")) procesador(sensores, L, W, H);
-  if (aula.nodos.includes("nodoVentana1")) sensores.nodoVentana1 = [L * 0.3, 2, W - 0.2];
-  if (aula.nodos.includes("nodoVentana2")) sensores.nodoVentana2 = [L * 0.62, 2, W - 0.2];
+  // generic placement of each node, kept only for the nodes this classroom hosts
+  const posiciones: Record<NodoId, [number, number, number]> = {
+    nodoAmbiental: [L / 2, H - 0.35, W / 2],
+    nodoPuerta: [L - 0.65, 2.3, 0.2],
+    procesadorAula: [0.3, H - 0.45, W / 2],
+    nodoVentana1: [L * 0.3, 2, W - 0.2],
+    nodoVentana2: [L * 0.62, 2, W - 0.2],
+  };
+  const sensores: Layout["sensores"] = Object.fromEntries(aula.nodos.map((n) => [n, posiciones[n]]));
   return {
     L,
     W,
     H,
     estimada: false,
-    door: { cx: L - 0.65 - 0, w: 1.05, h: 2.1 },
+    door: { cx: L - 0.65, w: 1.05, h: 2.1 },
     rows: [
       { x0: 1, len: L - 3, zc: W * 0.28, seats: 5 },
       { x0: 1, len: L - 3, zc: W * 0.62, seats: 5 },
@@ -130,13 +133,4 @@ export function buildLayout(aula: Aula): Layout {
     rightGlazing: aula.ventanas > 0,
     sensores,
   };
-}
-
-function procesador(
-  s: Layout["sensores"],
-  L: number,
-  W: number,
-  H: number,
-) {
-  s.procesadorAula = [0.3, H - 0.45, W / 2];
 }

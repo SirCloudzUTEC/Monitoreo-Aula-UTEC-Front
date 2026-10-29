@@ -94,7 +94,7 @@ export function PlanoSvg({
             rx={2}
           />
           <text x={px(pos[v]).x} y={px(pos[v]).y + 18} fontSize={11} fill="currentColor">
-            {v === "ventana1" ? "Ventana 1" : "Ventana 2"}
+            {`Ventana ${v.slice(-1)}`}
           </text>
         </g>
       ))}

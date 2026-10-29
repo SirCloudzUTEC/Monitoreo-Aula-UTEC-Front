@@ -3,7 +3,7 @@
 // Tiny 60-minute trend line for dashboard cards (no axes, no tooltip).
 
 import { Line, LineChart, ResponsiveContainer, YAxis } from "recharts";
-import type { PuntoSerie } from "@/lib/use-serie";
+import type { PuntoSerieApi as PuntoSerie } from "@/lib/api/endpoints";
 
 export function Sparkline({
   data,

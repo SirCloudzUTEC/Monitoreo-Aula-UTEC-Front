@@ -8,6 +8,7 @@
 // Layer toggles (capas) let the user strip the room down to the shell.
 
 import { useMemo } from "react";
+import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
 import type { Aula, NodoId } from "@/lib/types";
@@ -39,6 +40,37 @@ const C = {
 
 type V3 = [number, number, number];
 
+// Hundreds of boxes and cylinders share ONE unit geometry each (sized through `scale`) and one
+// material per distinct look, instead of allocating a geometry + material per mesh.
+const CAJA = new THREE.BoxGeometry(1, 1, 1);
+const CILINDRO = new THREE.CylinderGeometry(1, 1, 1, 12);
+const MATERIALES = new Map<string, THREE.MeshStandardMaterial>();
+
+function material(
+  color: string,
+  roughness: number,
+  metalness = 0,
+  opacity?: number,
+  emissive = "#000000",
+  emissiveIntensity = 0,
+): THREE.MeshStandardMaterial {
+  const clave = [color, roughness, metalness, opacity, emissive, emissiveIntensity].join("|");
+  let m = MATERIALES.get(clave);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({
+      color,
+      roughness,
+      metalness,
+      transparent: opacity !== undefined,
+      opacity: opacity ?? 1,
+      emissive,
+      emissiveIntensity,
+    });
+    MATERIALES.set(clave, m);
+  }
+  return m;
+}
+
 function Box({
   p,
   s,
@@ -63,20 +95,23 @@ function Box({
   castShadow?: boolean;
 }) {
   return (
-    <mesh position={p} rotation={[0, rotY, 0]} castShadow={castShadow} receiveShadow>
-      <boxGeometry args={s} />
-      <meshStandardMaterial
-        color={color}
-        roughness={rough}
-        metalness={metal}
-        transparent={opacity !== undefined}
-        opacity={opacity}
-        emissive={emissive ?? "#000000"}
-        emissiveIntensity={emissiveIntensity ?? 0}
-      />
-    </mesh>
+    <mesh
+      position={p}
+      rotation={[0, rotY, 0]}
+      scale={s}
+      geometry={CAJA}
+      material={material(color, rough, metal, opacity, emissive, emissiveIntensity)}
+      castShadow={castShadow}
+      receiveShadow
+    />
   );
 }
+
+const ROTACION_CYL: Record<"x" | "y" | "z", V3> = {
+  x: [0, 0, Math.PI / 2],
+  y: [0, 0, 0],
+  z: [Math.PI / 2, 0, 0],
+};
 
 function Cyl({
   p,
@@ -93,13 +128,8 @@ function Cyl({
   along?: "x" | "y" | "z";
   rough?: number;
 }) {
-  const rot: V3 =
-    along === "x" ? [0, 0, Math.PI / 2] : along === "z" ? [Math.PI / 2, 0, 0] : [0, 0, 0];
   return (
-    <mesh position={p} rotation={rot}>
-      <cylinderGeometry args={[r, r, h, 12]} />
-      <meshStandardMaterial color={color} roughness={rough} />
-    </mesh>
+    <mesh position={p} rotation={ROTACION_CYL[along]} scale={[r, h, r]} geometry={CILINDRO} material={material(color, rough)} />
   );
 }
 
@@ -486,7 +516,7 @@ export function ClassroomScene({
               nodo={n}
               position={pos}
               selected={selected === n}
-              onSelect={(id) => onSelect(id)}
+              onSelect={onSelect}
             />
           );
         })}

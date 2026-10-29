@@ -1,11 +1,4 @@
 import type { AulaCodigo, BloqueHorario, Horario } from "@/lib/types";
-import horarioSeed from "@/data/horario.json";
-
-export const HORARIO_DEFAULT = horarioSeed as Horario;
-
-/** Operating hours of the building: outside these the classroom is "Cerrada". */
-export const HORA_APERTURA = 7; // 07:00
-export const HORA_CIERRE = 22; // 22:00
 
 /**
  * The campus lives in America/Lima (UTC-5, no DST). All schedule math is done
@@ -16,11 +9,6 @@ export const LIMA_OFFSET_MS = 5 * 3600_000;
 
 function limaView(d: Date): Date {
   return new Date(d.getTime() - LIMA_OFFSET_MS);
-}
-
-/** Hour of day (0-23) in Lima wall time. */
-export function horaLima(d: Date): number {
-  return limaView(d).getUTCHours();
 }
 
 /** Day of week (0=Sunday) in Lima wall time. */
@@ -55,11 +43,6 @@ export function claseEnCurso(horario: Horario, aula: AulaCodigo, fecha: Date): b
   return bloqueEnCurso(horario, aula, fecha) !== null;
 }
 
-export function enHorarioOperacion(fecha: Date): boolean {
-  const h = horaLima(fecha);
-  return h >= HORA_APERTURA && h < HORA_CIERRE;
-}
-
 /** Next scheduled block from `fecha`, looking up to 7 days ahead. */
 export function proximoBloque(
   horario: Horario,
@@ -85,18 +68,9 @@ export function proximoBloque(
   return null;
 }
 
-/** Minutes elapsed since the current block started (0 if no class). */
-export function minutosDeClase(horario: Horario, aula: AulaCodigo, fecha: Date): number {
-  const b = bloqueEnCurso(horario, aula, fecha);
-  if (!b) return 0;
-  return minutesOfDay(fecha) - parseHM(b.inicio);
-}
-
-/** Minutes remaining of the current block (0 if no class). */
-export function minutosRestantes(horario: Horario, aula: AulaCodigo, fecha: Date): number {
-  const b = bloqueEnCurso(horario, aula, fecha);
-  if (!b) return 0;
-  return parseHM(b.fin) - minutesOfDay(fecha);
+/** Minutes remaining of a block in course at `fecha`. */
+export function minutosRestantes(bloque: BloqueHorario, fecha: Date): number {
+  return parseHM(bloque.fin) - minutesOfDay(fecha);
 }
 
 export const DIAS_SEMANA = [

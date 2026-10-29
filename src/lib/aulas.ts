@@ -13,3 +13,12 @@ export function getAula(codigo: AulaCodigo): Aula {
   if (!a) throw new Error(`Aula desconocida: ${codigo}`);
   return a;
 }
+
+/** One value per classroom: `porAula((a) => …)` instead of hand-built records. */
+export function porAula<T>(fn: (codigo: AulaCodigo) => T): Record<AulaCodigo, T> {
+  return Object.fromEntries(CODIGOS_AULA.map((a) => [a, fn(a)])) as Record<AulaCodigo, T>;
+}
+
+export function esCodigoAula(codigo: string): codigo is AulaCodigo {
+  return (CODIGOS_AULA as string[]).includes(codigo);
+}

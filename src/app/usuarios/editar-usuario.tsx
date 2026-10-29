@@ -11,34 +11,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RolSelect } from "@/components/common/form";
 import { SelectorAmbitos } from "@/app/usuarios/selector-ambitos";
 import type { Usuario } from "@/lib/api/endpoints";
-import type { Ambito, Rol } from "@/lib/auth/identity";
-
-export const ETIQUETA_ROL: Record<Rol, string> = {
-  miembro: "Usuario (solo visualización)",
-  admin_operativo: "Administrador (aulas y planos)",
-  superadmin: "Superusuario (gestión de usuarios)",
-};
-
-/** Only operational admins carry scopes (mirrors the backend rule). */
-export function ambitosPara(rol: Rol, ambitos: Ambito[]): Ambito[] {
-  return rol === "admin_operativo" ? ambitos : [];
-}
-
-/** Why the role/scopes pair cannot be saved, or null. */
-export function errorDeRol(rol: Rol, ambitos: Ambito[]): string | null {
-  return rol === "admin_operativo" && ambitos.length === 0
-    ? "Un administrador necesita al menos un ámbito (sin él no vería ningún incidente)."
-    : null;
-}
+import { ambitosPara, errorDeRol, type Ambito, type Rol } from "@/lib/auth/identity";
 
 /** Edits a role and, for operational admins, their scopes; existing scopes are the starting point. */
 export function EditarUsuario({
@@ -68,18 +44,7 @@ export function EditarUsuario({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="editar-rol">Rol</Label>
-            <Select value={rol} onValueChange={(v) => setRol(v as Rol)}>
-              <SelectTrigger id="editar-rol" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(ETIQUETA_ROL) as Rol[]).map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ETIQUETA_ROL[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <RolSelect id="editar-rol" value={rol} onChange={setRol} className="w-full" />
           </div>
           {rol === "admin_operativo" && (
             <div className="flex flex-col gap-1.5">

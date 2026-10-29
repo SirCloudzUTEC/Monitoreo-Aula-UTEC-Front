@@ -13,19 +13,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SIN_SERIE, useSerie } from "@/lib/use-serie";
 import { useVisible } from "@/lib/use-visible";
 import { CODIGOS_AULA } from "@/lib/aulas";
-import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
+import { useEstados, useEventosAbiertos, useSemaforos } from "@/lib/api/hooks";
 import {
   CLASE_SEMAFORO,
   ETIQUETA_SEMAFORO,
   MODULOS,
   eventosDeModulo,
   peorSemaforo,
-  semaforoModulo,
   type Semaforo,
 } from "@/lib/modules";
 import { formatearValor } from "@/lib/format";
-import { claseEnCurso } from "@/lib/schedule";
-import type { AulaCodigo, ModuloId } from "@/lib/types";
+import type { AulaCodigo, EstadoPuerta, ModuloId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // recharts is heavy and only draws tiny trend lines here: load it after the first paint
@@ -38,15 +36,16 @@ function FilaAula({
   aula,
   modulo,
   semaforo,
+  valor,
+  cargado,
 }: {
   aula: AulaCodigo;
   modulo: ModuloId;
   semaforo: Semaforo;
+  valor: number | EstadoPuerta | undefined;
+  cargado: boolean;
 }) {
   const info = MODULOS[modulo];
-  const { valores, antiguedadMs } = useEstados();
-  const cargado = antiguedadMs[aula] !== null;
-  const valor = valores[aula][info.principal];
   // the series request waits until the row is on screen
   const [ref, visible] = useVisible<HTMLDivElement>();
   const serie = useSerie(aula, info.principal, 60, 1, visible);
@@ -78,20 +77,11 @@ function FilaAula({
 export const ModuleCard = memo(function ModuleCard({ modulo }: { modulo: ModuloId }) {
   const info = MODULOS[modulo];
   const { abiertos } = useEventosAbiertos();
-  const { valores, antiguedadMs, nowMs: simNowMs } = useEstados();
+  const { valores, antiguedadMs } = useEstados();
+  const { semaforos } = useSemaforos();
   // don't claim "within range" for a room whose data has not arrived yet
   const cargado = CODIGOS_AULA.every((a) => antiguedadMs[a] !== null);
-  const { umbrales } = useUmbrales();
-  const { horario } = useHorario();
-
-  const fecha = new Date(simNowMs); // 0 before init: values are empty then anyway
-  const semaforos = Object.fromEntries(
-    CODIGOS_AULA.map((a) => [
-      a,
-      semaforoModulo(modulo, valores[a], umbrales, abiertos, a, claseEnCurso(horario, a, fecha)),
-    ]),
-  ) as Record<AulaCodigo, Semaforo>;
-  const agregado = CODIGOS_AULA.map((a) => semaforos[a]).reduce(peorSemaforo, "verde");
+  const agregado = CODIGOS_AULA.map((a) => semaforos[a][modulo]).reduce(peorSemaforo, "verde");
   const nAlertas = eventosDeModulo(abiertos, modulo).length;
 
   return (
@@ -124,7 +114,14 @@ export const ModuleCard = memo(function ModuleCard({ modulo }: { modulo: ModuloI
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {CODIGOS_AULA.map((a) => (
-            <FilaAula key={a} aula={a} modulo={modulo} semaforo={semaforos[a]} />
+            <FilaAula
+              key={a}
+              aula={a}
+              modulo={modulo}
+              semaforo={semaforos[a][modulo]}
+              valor={valores[a][info.principal]}
+              cargado={antiguedadMs[a] !== null}
+            />
           ))}
         </CardContent>
       </Card>

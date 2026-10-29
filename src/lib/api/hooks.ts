@@ -3,14 +3,17 @@
 // react-query hooks over the backend (docs/MIGRACION_FRONTEND_BACKEND.md §3).
 // They replace the old client-side simulation loop: polling with caching and
 // revalidation instead of a hand-rolled tick. Every read is gated on a signed-in
-// account holding `ver_datos_autorizados` (pending/suspended accounts get 403s).
+// account holding the permission it needs (pending/suspended accounts get 403s).
 
+import { useMemo } from "react";
 import {
   keepPreviousData,
   useMutation,
   useQueries,
   useQuery,
   useQueryClient,
+  type QueryKey,
+  type UseQueryOptions,
 } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -22,52 +25,50 @@ import {
   listarDispositivos,
   listarEventos,
   listarIncidentes,
+  listarUsuarios,
   logout,
   obtenerHorario,
   obtenerUmbrales,
   type EstadoAulaVivo,
   type FiltroEventos,
+  type Pagina,
 } from "@/lib/api/endpoints";
 import { mensajeDeError } from "@/lib/api/client";
 import { liberarPushAlSalir } from "@/lib/notify/push-client";
-import { CODIGOS_AULA } from "@/lib/aulas";
+import { CODIGOS_AULA, porAula } from "@/lib/aulas";
 import { puede, type Permiso } from "@/lib/auth/identity";
+import { ORDEN_MODULOS, semaforoModulo, type Semaforo } from "@/lib/modules";
+import { claseEnCurso } from "@/lib/schedule";
 import { useApp } from "@/lib/store";
-import type {
-  AulaCodigo,
-  EstadoAula,
-  EstadoPuerta,
-  Evento,
-  Horario,
-  Magnitud,
-  Umbrales,
-} from "@/lib/types";
+import type { AulaCodigo, EstadoAula, Evento, Horario, ModuloId, Severidad, Umbrales, Valores } from "@/lib/types";
 import umbralesSeed from "@/data/umbrales.json";
 
-/** Same cadence as the sensors (SYS latency budget: telemetry every 5 s). */
-export const INTERVALO_ESTADO_MS = 5_000;
+/**
+ * Same cadence as the sensors (SYS latency budget: telemetry every 5 s). NEXT_PUBLIC_INTERVALO_ESTADO_MS
+ * lowers it for local testing against a fast-reporting node (never below 1 s).
+ */
+const INTERVALO_ESTADO_MS = Math.max(1_000, Number(process.env.NEXT_PUBLIC_INTERVALO_ESTADO_MS) || 5_000);
 /** Alert list: less latency-sensitive than live readings. */
-export const INTERVALO_EVENTOS_MS = 15_000;
+const INTERVALO_EVENTOS_MS = 15_000;
 /** Critical alerts are the ones an admin must not learn about late: poll them as fast as readings. */
-export const INTERVALO_CRITICOS_MS = INTERVALO_ESTADO_MS;
+const INTERVALO_CRITICOS_MS = INTERVALO_ESTADO_MS;
 const INTERVALO_LOG_MS = 30_000;
-
-type Valores = Partial<Record<Magnitud, number | EstadoPuerta>>;
 
 export function useHabilitado(permiso: Permiso = "ver_datos_autorizados"): boolean {
   const cuenta = useApp((s) => s.cuenta);
   return cuenta !== null && puede(cuenta, permiso);
 }
 
+/** `useQuery` that only runs for an account holding `permiso`. */
+function useQueryHabilitada<T, R = T>(
+  permiso: Permiso,
+  opciones: Omit<UseQueryOptions<T, Error, R, QueryKey>, "enabled">,
+) {
+  return useQuery({ ...opciones, enabled: useHabilitado(permiso) });
+}
+
 // ---------------------------------------------------------------------------
 // live state
-
-const ESTADOS_VACIOS = Object.fromEntries(
-  CODIGOS_AULA.map((a) => [a, "Cerrada" as EstadoAula]),
-) as Record<AulaCodigo, EstadoAula>;
-const VALORES_VACIOS = Object.fromEntries(
-  CODIGOS_AULA.map((a) => [a, {} as Valores]),
-) as Record<AulaCodigo, Valores>;
 
 /**
  * `/estado` returns the newest reading ever stored, however old. Past this age without any new
@@ -76,7 +77,7 @@ const VALORES_VACIOS = Object.fromEntries(
  */
 export const LECTURA_OBSOLETA_MS = 5 * 60_000;
 
-export interface EstadosVivos {
+interface EstadosVivos {
   estados: Record<AulaCodigo, EstadoAula>;
   valores: Record<AulaCodigo, Valores>;
   /** Age (ms, against the server clock) of each room's newest reading; null before the first response. */
@@ -87,22 +88,18 @@ export interface EstadosVivos {
 }
 
 function combinarEstados(results: { data?: EstadoAulaVivo }[]): EstadosVivos {
-  const estados = { ...ESTADOS_VACIOS };
-  const valores = { ...VALORES_VACIOS };
-  const antiguedadMs = Object.fromEntries(CODIGOS_AULA.map((a) => [a, null])) as Record<
-    AulaCodigo,
-    number | null
-  >;
-  let nowMs = 0;
-  for (const r of results) {
-    if (!r.data) continue;
-    estados[r.data.aula] = r.data.estado;
-    valores[r.data.aula] = r.data.valores;
-    antiguedadMs[r.data.aula] =
-      r.data.ultimaLecturaMs > 0 ? Math.max(0, r.data.tsMs - r.data.ultimaLecturaMs) : Number.POSITIVE_INFINITY;
-    nowMs = Math.max(nowMs, r.data.tsMs);
-  }
-  return { estados, valores, antiguedadMs, nowMs, listo: results.every((r) => r.data) };
+  const r = porAula((a) => results.find((x) => x.data?.aula === a)?.data);
+  return {
+    estados: porAula((a) => r[a]?.estado ?? "Cerrada"),
+    valores: porAula((a) => r[a]?.valores ?? {}),
+    antiguedadMs: porAula((a) => {
+      const d = r[a];
+      if (!d) return null;
+      return d.ultimaLecturaMs > 0 ? Math.max(0, d.tsMs - d.ultimaLecturaMs) : Number.POSITIVE_INFINITY;
+    }),
+    nowMs: Math.max(0, ...results.map((x) => x.data?.tsMs ?? 0)),
+    listo: results.every((x) => x.data),
+  };
 }
 
 /** State + latest readings of every classroom, refreshed every 5 s. */
@@ -119,16 +116,42 @@ export function useEstados(): EstadosVivos {
   });
 }
 
+export interface Semaforos {
+  /** whether each classroom has a class in session right now (backend clock) */
+  enClase: Record<AulaCodigo, boolean>;
+  semaforos: Record<AulaCodigo, Record<ModuloId, Semaforo>>;
+}
+
+/** Traffic light of every module in every classroom, computed once per data change. */
+export function useSemaforos(): Semaforos {
+  const { valores, nowMs } = useEstados();
+  const { abiertos } = useEventosAbiertos();
+  const { umbrales } = useUmbrales();
+  const { horario } = useHorario();
+  return useMemo(() => {
+    const fecha = new Date(nowMs); // 0 before init: values are empty then anyway
+    const enClase = porAula((a) => claseEnCurso(horario, a, fecha));
+    const semaforos = porAula(
+      (a) =>
+        Object.fromEntries(
+          ORDEN_MODULOS.map((m) => [m, semaforoModulo(m, valores[a], umbrales, abiertos, a, enClase[a])]),
+        ) as Record<ModuloId, Semaforo>,
+    );
+    return { enClase, semaforos };
+  }, [valores, nowMs, abiertos, umbrales, horario]);
+}
+
 // ---------------------------------------------------------------------------
 // events
+
+type ResultadoPagina = { data?: Pagina<Evento>; isError: boolean; refetch: () => unknown };
+const SEVERIDADES_ALERTA = ["critico", "alerta"] as const satisfies readonly Severidad[];
 
 /**
  * Open alerts (severity alerta/critico). `info` rows (ingreso, inicio_clase…)
  * are never "open" in the UI, so they are not requested at all.
  */
-function combinarAbiertos(
-  results: { data?: { content: Evento[] }; isError: boolean; refetch: () => unknown }[],
-) {
+function combinarAbiertos(results: ResultadoPagina[]) {
   return {
     abiertos: results.flatMap((r) => r.data?.content ?? []).filter((e) => !e.cerrado),
     listo: results.every((r) => r.data),
@@ -138,40 +161,40 @@ function combinarAbiertos(
   };
 }
 
-export function useEventosAbiertos() {
+function combinarCerrados(results: ResultadoPagina[]): Evento[] {
+  return results.flatMap((r) => r.data?.content ?? []).sort((a, b) => b.ts.localeCompare(a.ts));
+}
+
+/** One request per alert severity, merged by `combine`. */
+function useAlertasPorSeveridad<R>(
+  abierto: boolean,
+  size: number,
+  intervalo: (s: Severidad) => number,
+  combine: (results: ResultadoPagina[]) => R,
+): R {
   const habilitado = useHabilitado();
   return useQueries({
-    queries: (["critico", "alerta"] as const).map((severidad) => ({
-      queryKey: ["eventos", "abiertos", severidad],
-      queryFn: () => listarEventos({ abierto: true, severidad, size: 200 }),
+    queries: SEVERIDADES_ALERTA.map((severidad) => ({
+      queryKey: ["eventos", abierto ? "abiertos" : "cerrados", severidad],
+      queryFn: () => listarEventos({ abierto, severidad, size }),
       enabled: habilitado,
-      refetchInterval: severidad === "critico" ? INTERVALO_CRITICOS_MS : INTERVALO_EVENTOS_MS,
+      refetchInterval: intervalo(severidad),
     })),
-    combine: combinarAbiertos,
+    combine,
   });
 }
 
+const intervaloAbiertos = (s: Severidad) => (s === "critico" ? INTERVALO_CRITICOS_MS : INTERVALO_EVENTOS_MS);
+const intervaloLog = () => INTERVALO_LOG_MS;
+
+export const useEventosAbiertos = () => useAlertasPorSeveridad(true, 200, intervaloAbiertos, combinarAbiertos);
+
 /** Closed alerts (history tab of /alertas). */
-export function useEventosCerrados() {
-  const habilitado = useHabilitado();
-  return useQueries({
-    queries: (["critico", "alerta"] as const).map((severidad) => ({
-      queryKey: ["eventos", "cerrados", severidad],
-      queryFn: () => listarEventos({ abierto: false, severidad, size: 100 }),
-      enabled: habilitado,
-      refetchInterval: INTERVALO_LOG_MS,
-    })),
-    combine: (results) =>
-      results
-        .flatMap((r) => r.data?.content ?? [])
-        .sort((a, b) => b.ts.localeCompare(a.ts)),
-  });
-}
+export const useEventosCerrados = () => useAlertasPorSeveridad(false, 100, intervaloLog, combinarCerrados);
 
 /** One server-side page of the event log (aula / severity / range filters). */
 export function useEventosPagina(filtro: FiltroEventos) {
-  const habilitado = useHabilitado();
-  return useQuery({
+  return useQueryHabilitada("ver_datos_autorizados", {
     queryKey: [
       "eventos",
       "pagina",
@@ -183,7 +206,6 @@ export function useEventosPagina(filtro: FiltroEventos) {
       filtro.size,
     ],
     queryFn: () => listarEventos(filtro),
-    enabled: habilitado,
     placeholderData: keepPreviousData,
     refetchInterval: INTERVALO_LOG_MS,
   });
@@ -191,11 +213,9 @@ export function useEventosPagina(filtro: FiltroEventos) {
 
 /** Most recent 200 events of the range (the backend page cap), used to build the actor footprint. */
 export function useEventosVentana(desde?: Date, hasta?: Date) {
-  const habilitado = useHabilitado();
-  return useQuery({
+  return useQueryHabilitada("ver_datos_autorizados", {
     queryKey: ["eventos", "ventana", desde?.getTime(), hasta?.getTime()],
     queryFn: () => listarEventos({ desde, hasta, size: 200 }), // backend max page size
-    enabled: habilitado,
     placeholderData: keepPreviousData,
   });
 }
@@ -215,59 +235,88 @@ export function useAcusar() {
 }
 
 // ---------------------------------------------------------------------------
-// admin summary (dashboard "Salud operativa"): counts only, so the same cache keys as the full
-// pages are reused where possible and a mutation there refreshes the dashboard too.
+// admin lists. The dashboard "Salud operativa" reuses the same cache keys as
+// the full pages, so a mutation there refreshes the dashboard too.
 
 /** Incidents waiting for someone to take them (`abierto`); needs `atender_incidentes`. */
-export function useIncidentesSinAtender() {
-  const habilitado = useHabilitado("atender_incidentes");
-  return useQuery({
+export const useIncidentesSinAtender = () =>
+  useQueryHabilitada("atender_incidentes", {
     queryKey: ["incidentes", "resumen", "abierto"],
     queryFn: () => listarIncidentes({ estado: "abierto", size: 1 }),
-    enabled: habilitado,
     refetchInterval: INTERVALO_LOG_MS,
     select: (p) => p.totalElements,
   });
-}
 
-/** Registered MQTT nodes (same cache as /dispositivos); needs `gestionar_dispositivos`. */
-export function useDispositivos() {
-  const habilitado = useHabilitado("gestionar_dispositivos");
-  return useQuery({
+/** One page of incident reports: the operational list, or only the account's own. */
+export const useIncidentes = (verTodos: boolean, page: number, size: number) =>
+  useQueryHabilitada("reportar_incidente", {
+    queryKey: ["incidentes", verTodos, page],
+    queryFn: () => listarIncidentes({ propios: !verTodos, page, size }),
+    refetchInterval: INTERVALO_LOG_MS,
+    // paging keeps the current list on screen until the next page arrives
+    placeholderData: keepPreviousData,
+  });
+
+/** Registered MQTT nodes; needs `gestionar_dispositivos`. */
+export const useDispositivos = () =>
+  useQueryHabilitada("gestionar_dispositivos", {
     queryKey: ["dispositivos"],
     queryFn: listarDispositivos,
-    enabled: habilitado,
     refetchInterval: INTERVALO_LOG_MS,
+  });
+
+export const useUsuarios = () =>
+  useQueryHabilitada("gestionar_usuarios", { queryKey: ["usuarios"], queryFn: listarUsuarios });
+
+/**
+ * Admin action: toasts the backend's reason on failure and, on success, shows `ok` (if any) and
+ * refreshes the `invalidar` list.
+ */
+export function useMutacionAdmin<V, R>({
+  fn,
+  invalidar,
+  ok,
+  alTerminar,
+  error = "No se pudo completar la acción.",
+}: {
+  fn: (v: V) => Promise<R>;
+  invalidar: string;
+  ok?: string | ((r: R) => string);
+  alTerminar?: (r: R) => void;
+  error?: string;
+}) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (r) => {
+      if (ok) toast.success(typeof ok === "function" ? ok(r) : ok);
+      alTerminar?.(r);
+      void qc.invalidateQueries({ queryKey: [invalidar] });
+    },
+    onError: (e) => toast.error(mensajeDeError(e, error)),
   });
 }
 
 // ---------------------------------------------------------------------------
 // settings
 
-const HORARIO_VACIO = Object.fromEntries(
-  CODIGOS_AULA.map((a) => [a, []]),
-) as unknown as Horario;
+/** Server config with a local fallback until it loads. */
+function useConfig<T>(key: string, queryFn: () => Promise<T>, fallback: T): { data: T; listo: boolean } {
+  const q = useQueryHabilitada("ver_datos_autorizados", { queryKey: [key], queryFn, staleTime: 60_000 });
+  return { data: q.data ?? fallback, listo: q.isSuccess };
+}
+
+const HORARIO_VACIO = porAula(() => []) as Horario;
+const cargarHorario = () => obtenerHorario(CODIGOS_AULA);
 
 export function useUmbrales(): { umbrales: Umbrales; listo: boolean } {
-  const habilitado = useHabilitado();
-  const q = useQuery({
-    queryKey: ["umbrales"],
-    queryFn: obtenerUmbrales,
-    enabled: habilitado,
-    staleTime: 60_000,
-  });
-  return { umbrales: q.data ?? (umbralesSeed as Umbrales), listo: q.isSuccess };
+  const { data, listo } = useConfig("umbrales", obtenerUmbrales, umbralesSeed as Umbrales);
+  return { umbrales: data, listo };
 }
 
 export function useHorario(): { horario: Horario; listo: boolean } {
-  const habilitado = useHabilitado();
-  const q = useQuery({
-    queryKey: ["horario"],
-    queryFn: () => obtenerHorario(CODIGOS_AULA),
-    enabled: habilitado,
-    staleTime: 60_000,
-  });
-  return { horario: q.data ?? HORARIO_VACIO, listo: q.isSuccess };
+  const { data, listo } = useConfig("horario", cargarHorario, HORARIO_VACIO);
+  return { horario: data, listo };
 }
 
 export function useGuardarUmbrales() {

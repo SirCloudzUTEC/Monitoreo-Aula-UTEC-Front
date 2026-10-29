@@ -5,41 +5,30 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/common/layout";
 import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
-import { useApp, estaEscalado } from "@/lib/store";
-import { useAcusar, useEstados } from "@/lib/api/hooks";
-import { puede } from "@/lib/auth/identity";
-import { fechaHoraDeIso } from "@/lib/format";
-import type { Evento, Severidad } from "@/lib/types";
+import { estaEscalado } from "@/lib/store";
+import { useAcusar, useHabilitado } from "@/lib/api/hooks";
+import { CLASE_SEVERIDAD, ETIQUETA_SEVERIDAD, fechaHoraDeIso } from "@/lib/format";
+import type { Evento } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useOnline } from "@/lib/use-online";
-
-export const CLASE_SEVERIDAD: Record<Severidad, string> = {
-  info: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
-  alerta: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  critico: "bg-red-600 text-white",
-};
-
-export const ETIQUETA_SEVERIDAD: Record<Severidad, string> = {
-  info: "Info",
-  alerta: "Alerta",
-  critico: "Crítico",
-};
 
 export function EventoCard({
   evento,
   abierta = false,
+  nowMs = 0,
 }: {
   evento: Evento;
   abierta?: boolean;
+  /** backend clock, to tell whether an open alert has escalated */
+  nowMs?: number;
 }) {
   const acusar = useAcusar();
-  const cuenta = useApp((s) => s.cuenta);
-  const canWrite = cuenta ? puede(cuenta, "atender_incidentes") : false;
+  const canWrite = useHabilitado("atender_incidentes");
   const online = useOnline();
-  const { nowMs: simNowMs } = useEstados();
   const cat = CATALOGO_EVENTOS[evento.tipo];
-  const escalado = abierta && estaEscalado(evento, simNowMs);
+  const escalado = abierta && estaEscalado(evento, nowMs);
 
   return (
     <div
@@ -49,14 +38,7 @@ export function EventoCard({
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={cn(
-            "rounded-full px-2.5 py-0.5 text-xs font-medium",
-            CLASE_SEVERIDAD[evento.severidad],
-          )}
-        >
-          {ETIQUETA_SEVERIDAD[evento.severidad]}
-        </span>
+        <Chip clase={CLASE_SEVERIDAD[evento.severidad]}>{ETIQUETA_SEVERIDAD[evento.severidad]}</Chip>
         <span className="text-base font-medium">{cat.nombre}</span>
         <Badge variant="outline">{evento.aula}</Badge>
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">

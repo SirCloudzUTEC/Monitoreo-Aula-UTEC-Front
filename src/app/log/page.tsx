@@ -9,23 +9,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader, Vacio } from "@/components/common/layout";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { ETIQUETA_SEVERIDAD } from "@/components/events/evento-card";
-import { CODIGOS_AULA } from "@/lib/aulas";
+  FiltroAulaSelect,
+  FiltroSeveridadSelect,
+  SelectSimple,
+  opcionesDe,
+  sinTodas,
+  type FiltroAula,
+  type FiltroSeveridad,
+} from "@/components/common/form";
+import { DataTable, Paginador, totalPaginas, type Columna } from "@/components/common/data-table";
 import { useEventosPagina, useEventosVentana } from "@/lib/api/hooks";
 import { listarEventos } from "@/lib/api/endpoints";
 import { mensajeDeError } from "@/lib/api/client";
@@ -39,52 +33,32 @@ import {
   type LogRow,
 } from "@/lib/events/log";
 import { descargarArchivo } from "@/lib/data/storage";
-import { fechaHoraDeIso } from "@/lib/format";
-import type { AulaCodigo, Severidad } from "@/lib/types";
+import { ETIQUETA_SEVERIDAD, fechaHoraDeIso } from "@/lib/format";
 
 const POR_PAGINA = 50;
+
+const COLUMNAS: Columna<LogRow>[] = [
+  { titulo: "Fecha/hora", className: "whitespace-nowrap tabular-nums", celda: (r) => fechaHoraDeIso(r.ts) },
+  { titulo: "Aula", celda: (r) => r.aula },
+  { titulo: "Tipo", className: "font-mono text-xs", celda: (r) => r.tipo },
+  { titulo: "Severidad", celda: (r) => ETIQUETA_SEVERIDAD[r.severidad] },
+  { titulo: "Fuente", className: "max-w-32 truncate text-xs", celda: (r) => r.fuente },
+  { titulo: "Valor", className: "max-w-32 truncate font-mono text-xs", celda: (r) => r.valor },
+  { titulo: "Umbral", className: "font-mono text-xs", celda: (r) => r.umbral },
+  { titulo: "Actor", className: "text-xs", celda: (r) => r.actor },
+  { titulo: "Estado", className: "text-xs", celda: (r) => r.estado_resultante },
+];
 
 function TablaLog({ rows }: { rows: LogRow[] }) {
   return (
     <div className="overflow-x-auto rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Fecha/hora</TableHead>
-            <TableHead>Aula</TableHead>
-            <TableHead>Tipo</TableHead>
-            <TableHead>Severidad</TableHead>
-            <TableHead>Fuente</TableHead>
-            <TableHead>Valor</TableHead>
-            <TableHead>Umbral</TableHead>
-            <TableHead>Actor</TableHead>
-            <TableHead>Estado</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.id_evento}>
-              <TableCell className="whitespace-nowrap tabular-nums">
-                {fechaHoraDeIso(r.ts)}
-              </TableCell>
-              <TableCell>{r.aula}</TableCell>
-              <TableCell className="font-mono text-xs">{r.tipo}</TableCell>
-              <TableCell>{ETIQUETA_SEVERIDAD[r.severidad]}</TableCell>
-              <TableCell className="max-w-32 truncate text-xs">{r.fuente}</TableCell>
-              <TableCell className="max-w-32 truncate font-mono text-xs">{r.valor}</TableCell>
-              <TableCell className="font-mono text-xs">{r.umbral}</TableCell>
-              <TableCell className="text-xs">{r.actor}</TableCell>
-              <TableCell className="text-xs">{r.estado_resultante}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {rows.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Sin filas para mostrar.</p>
-      )}
+      <DataTable columnas={COLUMNAS} filas={rows} clave={(r) => r.id_evento} />
+      {rows.length === 0 && <Vacio>Sin filas para mostrar.</Vacio>}
     </div>
   );
 }
+
+const fechaLima = (dia: string, hora: string) => (dia ? new Date(`${dia}T${hora}-05:00`) : undefined);
 
 /** CSV export walks every server page of the current filter, up to this many rows. */
 const MAX_FILAS_CSV = 10_000;
@@ -92,36 +66,33 @@ const MAX_FILAS_CSV = 10_000;
 const TAMANO_PAGINA_CSV = 200;
 
 export default function LogPage() {
-  const [aula, setAula] = useState<AulaCodigo | "todas">("todas");
-  const [sev, setSev] = useState<Severidad | "todas">("todas");
+  const [aula, setAula] = useState<FiltroAula>("todas");
+  const [sev, setSev] = useState<FiltroSeveridad>("todas");
   const [texto, setTexto] = useState("");
   const [pagina, setPagina] = useState(0);
   const [actor, setActor] = useState<string>("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+  const filtro = { aula: sinTodas(aula), severidad: sinTodas(sev) };
 
   // Registro tab: aula/severidad are filtered and paginated by the server; the
   // free-text box narrows the page that is already loaded.
-  const pagina_ = useEventosPagina({
-    aula: aula === "todas" ? undefined : aula,
-    severidad: sev === "todas" ? undefined : sev,
-    page: pagina,
-    size: POR_PAGINA,
-  });
-  const total = pagina_.data?.totalElements ?? 0;
-  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
-  const paginaActual = Math.min(pagina, totalPaginas - 1);
+  const consulta = useEventosPagina({ ...filtro, page: pagina, size: POR_PAGINA });
+  const total = consulta.data?.totalElements ?? 0;
+  const paginas = totalPaginas(total, POR_PAGINA);
+  const paginaActual = Math.min(pagina, paginas - 1);
   const visibles = useMemo(
-    () => filtrarLog(pagina_.data?.content ?? [], { texto: texto || undefined }),
-    [pagina_.data, texto],
+    () => filtrarLog(consulta.data?.content ?? [], { texto: texto || undefined }),
+    [consulta.data, texto],
   );
 
   // Huella tab: a window of the log (the range inputs narrow it server-side).
-  const desdeFecha = desde ? new Date(`${desde}T00:00:00-05:00`) : undefined;
-  const hastaFecha = hasta ? new Date(`${hasta}T23:59:59-05:00`) : undefined;
-  const ventana = useEventosVentana(desdeFecha, hastaFecha);
+  const ventana = useEventosVentana(fechaLima(desde, "00:00:00"), fechaLima(hasta, "23:59:59"));
   const filasVentana = useMemo(() => ventana.data?.content ?? [], [ventana.data]);
-  const actores = useMemo(() => actoresEnLog(filasVentana), [filasVentana]);
+  const opcionesActor = useMemo(
+    () => ({ ninguno: "Elige un actor…", ...opcionesDe(actoresEnLog(filasVentana)) }),
+    [filasVentana],
+  );
   const huella = useMemo(
     () => (actor ? footprint(filasVentana, actor, 0, Number.MAX_SAFE_INTEGER) : []),
     [filasVentana, actor],
@@ -131,12 +102,7 @@ export default function LogPage() {
     try {
       const filas: LogRow[] = [];
       for (let p = 0; filas.length < MAX_FILAS_CSV; p++) {
-        const r = await listarEventos({
-          aula: aula === "todas" ? undefined : aula,
-          severidad: sev === "todas" ? undefined : sev,
-          page: p,
-          size: TAMANO_PAGINA_CSV,
-        });
+        const r = await listarEventos({ ...filtro, page: p, size: TAMANO_PAGINA_CSV });
         filas.push(...r.content);
         // use the size the server really applied, not the one requested
         if (r.content.length === 0 || (p + 1) * r.size >= r.totalElements) break;
@@ -149,17 +115,21 @@ export default function LogPage() {
     }
   };
 
+  // a filter change goes back to the first page
+  const conReinicio =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v);
+      setPagina(0);
+    };
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-3">
-          <ScrollTextIcon className="size-7 text-primary" aria-hidden />
-          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Log de eventos</h1>
-        </div>
-        <p className="text-base text-muted-foreground">
-          {total} filas en el registro · retención de {RETENCION_DIAS} días
-        </p>
-      </div>
+      <PageHeader
+        icon={ScrollTextIcon}
+        title="Log de eventos"
+        subtitle={`${total} filas en el registro · retención de ${RETENCION_DIAS} días`}
+      />
 
       <Tabs defaultValue="log">
         <TabsList>
@@ -169,44 +139,8 @@ export default function LogPage() {
 
         <TabsContent value="log" className="mt-3 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={aula}
-              onValueChange={(v) => {
-                setAula(v as AulaCodigo | "todas");
-                setPagina(0);
-              }}
-            >
-              <SelectTrigger className="w-36" aria-label="Filtrar por aula">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas las aulas</SelectItem>
-                {CODIGOS_AULA.map((a) => (
-                  <SelectItem key={a} value={a}>
-                    {a}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={sev}
-              onValueChange={(v) => {
-                setSev(v as Severidad | "todas");
-                setPagina(0);
-              }}
-            >
-              <SelectTrigger className="w-36" aria-label="Filtrar por severidad">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Toda severidad</SelectItem>
-                {(["critico", "alerta", "info"] as Severidad[]).map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {ETIQUETA_SEVERIDAD[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FiltroAulaSelect value={aula} onChange={conReinicio(setAula)} />
+            <FiltroSeveridadSelect value={sev} onChange={conReinicio(setSev)} />
             <Input
               placeholder="Filtrar en esta página…"
               value={texto}
@@ -220,27 +154,12 @@ export default function LogPage() {
 
           <TablaLog rows={visibles} />
 
-          <div className="flex items-center justify-between text-sm">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={paginaActual === 0}
-              onClick={() => setPagina(paginaActual - 1)}
-            >
-              ← Anterior
-            </Button>
-            <span className="text-muted-foreground">
-              Página {paginaActual + 1} de {totalPaginas}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={paginaActual >= totalPaginas - 1 || pagina_.isPlaceholderData}
-              onClick={() => setPagina(paginaActual + 1)}
-            >
-              Siguiente →
-            </Button>
-          </div>
+          <Paginador
+            pagina={paginaActual}
+            total={paginas}
+            onChange={setPagina}
+            bloquearSiguiente={consulta.isPlaceholderData}
+          />
         </TabsContent>
 
         <TabsContent value="huella" className="mt-3 flex flex-col gap-3">
@@ -249,35 +168,27 @@ export default function LogPage() {
             fechas.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={actor || "ninguno"} onValueChange={(v) => setActor(v === "ninguno" ? "" : v)}>
-              <SelectTrigger className="w-48" aria-label="Actor">
-                <SelectValue placeholder="Elige un actor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ninguno">Elige un actor…</SelectItem>
-                {actores.map((a) => (
-                  <SelectItem key={a} value={a}>
-                    {a}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <label className="flex items-center gap-1 text-sm">
-              Desde
-              <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="w-40" />
-            </label>
-            <label className="flex items-center gap-1 text-sm">
-              Hasta
-              <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="w-40" />
-            </label>
+            <SelectSimple
+              value={actor || "ninguno"}
+              onChange={(v) => setActor(v === "ninguno" ? "" : v)}
+              opciones={opcionesActor}
+              className="w-48"
+              ariaLabel="Actor"
+              placeholder="Elige un actor"
+            />
+            {(
+              [
+                ["Desde", desde, setDesde],
+                ["Hasta", hasta, setHasta],
+              ] as const
+            ).map(([etiqueta, valor, set]) => (
+              <label key={etiqueta} className="flex items-center gap-1 text-sm">
+                {etiqueta}
+                <Input type="date" value={valor} onChange={(e) => set(e.target.value)} className="w-40" />
+              </label>
+            ))}
           </div>
-          {actor ? (
-            <TablaLog rows={huella} />
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Elige un actor para ver su huella.
-            </p>
-          )}
+          {actor ? <TablaLog rows={huella} /> : <Vacio>Elige un actor para ver su huella.</Vacio>}
         </TabsContent>
       </Tabs>
     </div>

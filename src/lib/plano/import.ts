@@ -1,7 +1,6 @@
 // F5 — floor-plan import: CSV points, DXF (LINE / LWPOLYLINE only) and a JSON
 // polygon fallback. Coordinates are meters; mm/cm drawings are auto-scaled.
 
-import DxfParser from "dxf-parser";
 import type { PosicionPlano } from "@/lib/types";
 
 export interface ResultadoImport {
@@ -32,7 +31,7 @@ function normalizar(puntos: PosicionPlano[], origen: ResultadoImport["origen"]):
 }
 
 /** CSV: one "x,y" pair per line; an optional "x,y" header is skipped. */
-export function parseCsvPlano(texto: string): ResultadoImport {
+function parseCsvPlano(texto: string): ResultadoImport {
   const puntos: PosicionPlano[] = [];
   for (const linea of texto.split(/\r?\n/)) {
     const t = linea.trim();
@@ -46,7 +45,7 @@ export function parseCsvPlano(texto: string): ResultadoImport {
 }
 
 /** JSON: { "puntos": [{"x":0,"y":0}, ...] } or [[x,y], ...]. */
-export function parseJsonPlano(texto: string): ResultadoImport {
+function parseJsonPlano(texto: string): ResultadoImport {
   const data: unknown = JSON.parse(texto);
   let puntos: PosicionPlano[] = [];
   if (Array.isArray(data)) {
@@ -67,7 +66,9 @@ interface EntidadDxf {
 }
 
 /** DXF: takes the longest LWPOLYLINE, or chains LINE segments if none. */
-export function parseDxfPlano(texto: string): ResultadoImport {
+async function parseDxfPlano(texto: string): Promise<ResultadoImport> {
+  // the DXF parser is only downloaded when a .dxf file is actually imported
+  const { default: DxfParser } = await import("dxf-parser");
   const parser = new DxfParser();
   const dxf = parser.parseSync(texto);
   const entidades = (dxf?.entities ?? []) as EntidadDxf[];
@@ -115,12 +116,18 @@ export function parseDxfPlano(texto: string): ResultadoImport {
   );
 }
 
-export function parsePlano(nombre: string, texto: string): ResultadoImport {
-  const ext = nombre.toLowerCase().split(".").pop();
-  if (ext === "csv" || ext === "txt") return parseCsvPlano(texto);
-  if (ext === "json") return parseJsonPlano(texto);
-  if (ext === "dxf") return parseDxfPlano(texto);
-  throw new Error(`Formato no soportado: .${ext}. Usa CSV, DXF o JSON.`);
+const PARSERS: Record<string, (texto: string) => ResultadoImport | Promise<ResultadoImport>> = {
+  csv: parseCsvPlano,
+  txt: parseCsvPlano,
+  json: parseJsonPlano,
+  dxf: parseDxfPlano,
+};
+
+export async function parsePlano(nombre: string, texto: string): Promise<ResultadoImport> {
+  const ext = nombre.toLowerCase().split(".").pop() ?? "";
+  const parser = PARSERS[ext];
+  if (!parser) throw new Error(`Formato no soportado: .${ext}. Usa CSV, DXF o JSON.`);
+  return parser(texto);
 }
 
 export const PLANTILLA_CSV = `x,y

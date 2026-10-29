@@ -5,15 +5,9 @@
 // range costs the same as one hour.
 
 import { useQuery } from "@tanstack/react-query";
-import { serieAula } from "@/lib/api/endpoints";
+import { serieAula, type PuntoSerieApi } from "@/lib/api/endpoints";
 import { useHabilitado } from "@/lib/api/hooks";
 import type { AulaCodigo, Magnitud } from "@/lib/types";
-
-export interface PuntoSerie {
-  ts: string;
-  t: number;
-  valor: number;
-}
 
 /** `puerta` is textual: the backend has no numeric series for it. */
 export const SIN_SERIE: readonly Magnitud[] = ["puerta"];
@@ -25,7 +19,7 @@ export function useSerie(
   pasoMin = 1,
   /** false defers the request (e.g. until the chart scrolls into view) */
   activa = true,
-): PuntoSerie[] {
+): PuntoSerieApi[] {
   const habilitado = useHabilitado();
   const pasoMs = pasoMin * 60_000;
   const { data } = useQuery({
@@ -46,4 +40,4 @@ export function useSerie(
   return data ?? EMPTY;
 }
 
-const EMPTY: PuntoSerie[] = [];
+const EMPTY: PuntoSerieApi[] = [];

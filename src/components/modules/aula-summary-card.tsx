@@ -7,41 +7,47 @@ import { memo } from "react";
 import Link from "next/link";
 import { CalendarClockIcon, MonitorIcon, UsersIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Chip } from "@/components/common/layout";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AvisoObsoleto } from "@/components/modules/aviso-obsoleto";
 import { getAula } from "@/lib/aulas";
-import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
+import { useEstados, useHorario, useSemaforos } from "@/lib/api/hooks";
 import { bloqueEnCurso, minutosRestantes, proximoBloque, DIAS_SEMANA } from "@/lib/schedule";
 import { CLASE_ESTADO, ETIQUETA_ESTADO, formatearValor, fechaHoraCorta } from "@/lib/format";
-import { CLASE_FONDO_SEMAFORO, semaforoModulo } from "@/lib/modules";
-import type { AulaCodigo, ModuloId } from "@/lib/types";
+import { CLASE_FONDO_SEMAFORO, MODULOS, ORDEN_MODULOS, type Semaforo } from "@/lib/modules";
+import { MAGNITUDES } from "@/lib/units";
+import type { AulaCodigo, Magnitud, ModuloId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Módulo dueño de cada lectura rápida que se muestra en esta tarjeta. */
-const MODULO_DE_MEDICION: Record<"temperatura" | "humedad" | "co2" | "ruido", ModuloId> = {
-  temperatura: "confort",
-  humedad: "confort",
-  co2: "aire",
-  ruido: "ruido",
+/** Quick readings shown on the card. */
+const LECTURAS_RAPIDAS: Magnitud[] = ["temperatura", "humedad", "co2", "ruido"];
+
+/** Módulo dueño de cada magnitud (inverse of MODULOS[].magnitudes). */
+const MODULO_DE_MAGNITUD = Object.fromEntries(
+  ORDEN_MODULOS.flatMap((m) => MODULOS[m].magnitudes.map((g) => [g, m])),
+) as Partial<Record<Magnitud, ModuloId>>;
+
+const TITULO_SEMAFORO: Record<Semaforo, string> = {
+  rojo: "Con alerta: ver módulo",
+  amarillo: "Cerca del umbral: ver módulo",
+  verde: "Ver módulo",
 };
 
 export const AulaSummaryCard = memo(function AulaSummaryCard({ aula }: { aula: AulaCodigo }) {
-  const { estados, valores: todos, antiguedadMs, nowMs: simNowMs } = useEstados();
+  const { estados, valores: todos, antiguedadMs, nowMs } = useEstados();
   // null until this room's first response: nothing below is real data before that
   const cargado = antiguedadMs[aula] !== null;
   const estado = estados[aula];
   const valores = todos[aula];
-  const { umbrales } = useUmbrales();
-  const { abiertos } = useEventosAbiertos();
+  const { semaforos } = useSemaforos();
   const { horario } = useHorario();
   const spec = getAula(aula);
 
-  const fecha = new Date(simNowMs); // 0 before init: values are empty then anyway
+  const fecha = new Date(nowMs); // 0 before init: values are empty then anyway
   const bloque = bloqueEnCurso(horario, aula, fecha);
   const proximo = proximoBloque(horario, aula, fecha);
   const ocupacion = typeof valores.ocupacion === "number" ? valores.ocupacion : 0;
-  const enClase = bloque !== null;
 
   return (
     <Card className="glow-hover">
@@ -51,11 +57,9 @@ export const AulaSummaryCard = memo(function AulaSummaryCard({ aula }: { aula: A
             {spec.nombre}
           </Link>
           {cargado ? (
-            <span
-              className={cn("rounded-full px-3 py-0.5 text-sm font-medium", CLASE_ESTADO[estado])}
-            >
+            <Chip clase={CLASE_ESTADO[estado]} className="px-3 text-sm">
               {ETIQUETA_ESTADO[estado]}
-            </span>
+            </Chip>
           ) : (
             <Skeleton className="h-6 w-20 rounded-full" />
           )}
@@ -79,7 +83,7 @@ export const AulaSummaryCard = memo(function AulaSummaryCard({ aula }: { aula: A
           ) : bloque ? (
             <span>
               <span className="font-medium text-foreground">{bloque.curso}</span> · termina en{" "}
-              {minutosRestantes(horario, aula, fecha)} min
+              {minutosRestantes(bloque, fecha)} min
             </span>
           ) : proximo ? (
             <span>
@@ -108,36 +112,17 @@ export const AulaSummaryCard = memo(function AulaSummaryCard({ aula }: { aula: A
           <Progress value={cargado ? Math.min(100, (ocupacion / spec.aforo) * 100) : 0} />
         </div>
         <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-          {(["temperatura", "humedad", "co2", "ruido"] as const).map((m) => {
-            const modulo = MODULO_DE_MEDICION[m];
-            const semaforo = cargado
-              ? semaforoModulo(modulo, valores, umbrales, abiertos, aula, enClase)
-              : "verde";
+          {LECTURAS_RAPIDAS.map((m) => {
+            const modulo = MODULO_DE_MAGNITUD[m]!;
+            const semaforo = cargado ? semaforos[aula][modulo] : "verde";
             return (
               <Link
                 key={m}
                 href={`/modulo/${modulo}?aula=${aula}`}
-                className={cn(
-                  "rounded-lg p-3 transition-colors",
-                  cargado ? CLASE_FONDO_SEMAFORO[semaforo] : "bg-muted/50",
-                )}
-                title={
-                  semaforo === "rojo"
-                    ? "Con alerta: ver módulo"
-                    : semaforo === "amarillo"
-                      ? "Cerca del umbral: ver módulo"
-                      : "Ver módulo"
-                }
+                className={cn("rounded-lg p-3 transition-colors", CLASE_FONDO_SEMAFORO[semaforo])}
+                title={TITULO_SEMAFORO[semaforo]}
               >
-                <div className="text-xs text-muted-foreground">
-                  {m === "temperatura"
-                    ? "Temperatura"
-                    : m === "humedad"
-                      ? "Humedad"
-                      : m === "co2"
-                        ? "CO₂"
-                        : "Ruido"}
-                </div>
+                <div className="text-xs text-muted-foreground">{MAGNITUDES[m].corta}</div>
                 <div className="font-mono text-base font-semibold tabular-nums">
                   {cargado ? formatearValor(m, valores[m]) : <Skeleton className="mx-auto h-5 w-14" />}
                 </div>

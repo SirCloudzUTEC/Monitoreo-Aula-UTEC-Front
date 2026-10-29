@@ -6,7 +6,7 @@ import {
   saltoAnomalias,
   zscoreAnomalias,
 } from "@/lib/anomaly/detector";
-import { mulberry32 } from "@/lib/simulator/rng";
+import { mulberry32 } from "@/lib/anomaly/rng";
 
 function serieEstable(n: number, base = 600, ruido = 5): number[] {
   const rng = mulberry32(7);

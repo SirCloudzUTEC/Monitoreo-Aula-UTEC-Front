@@ -9,7 +9,6 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AlertasEnVivo } from "@/components/alertas-en-vivo";
 import { PantallaCarga } from "@/components/layout/pantalla-carga";
@@ -131,10 +130,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         enableSystem
         disableTransitionOnChange
       >
-        <TooltipProvider delayDuration={200}>
-          <SesionGate queryClient={queryClient}>{children}</SesionGate>
-          <Toaster position="top-right" richColors closeButton />
-        </TooltipProvider>
+        <SesionGate queryClient={queryClient}>{children}</SesionGate>
+        <Toaster position="top-right" richColors closeButton />
       </ThemeProvider>
     </QueryClientProvider>
   );

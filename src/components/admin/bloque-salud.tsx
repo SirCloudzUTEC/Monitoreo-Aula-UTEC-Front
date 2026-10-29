@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AVISO_LATIDO_MS } from "@/app/dispositivos/nodos";
+import { AVISO_LATIDO_MS } from "@/lib/dispositivos";
 import {
   LECTURA_OBSOLETA_MS,
   useDispositivos,

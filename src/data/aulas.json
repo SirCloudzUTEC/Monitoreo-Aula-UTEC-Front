@@ -18,9 +18,7 @@
       "procesadorAula": { "x": 11.9, "y": 7.9 },
       "puerta": { "x": 0, "y": 7.2 },
       "ventana1": { "x": 3.1, "y": 0 },
-      "ventana2": { "x": 8.1, "y": 0 },
-      "proyector": { "x": 6.25, "y": 2.9 },
-      "pantallaLocal": { "x": 12.1, "y": 7.2 }
+      "ventana2": { "x": 8.1, "y": 0 }
     },
     "componentes": [
       { "id": "proyector", "nombre": "Proyector", "cantidad": 1, "pos": { "x": 6.25, "y": 2.9 } },
@@ -47,9 +45,7 @@
       "nodoAmbiental": { "x": 5, "y": 3 },
       "nodoPuerta": { "x": 0.3, "y": 5.2 },
       "procesadorAula": { "x": 9.5, "y": 5.5 },
-      "puerta": { "x": 0, "y": 5 },
-      "proyector": { "x": 5, "y": 2 },
-      "pantallaLocal": { "x": 9.7, "y": 5 }
+      "puerta": { "x": 0, "y": 5 }
     },
     "componentes": [
       { "id": "proyector", "nombre": "Proyector", "cantidad": 1, "pos": { "x": 5, "y": 2 } },

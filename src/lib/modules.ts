@@ -1,14 +1,8 @@
 // The 8 domain modules of the dashboard (F1) and their traffic-light logic.
 
-import type {
-  AulaCodigo,
-  EstadoPuerta,
-  Evento,
-  Magnitud,
-  ModuloId,
-  Umbrales,
-} from "@/lib/types";
+import type { AulaCodigo, Evento, Magnitud, ModuloId, Umbrales, Valores } from "@/lib/types";
 import { CATALOGO_EVENTOS } from "@/lib/events/catalog";
+import { fueraDeUmbral } from "@/lib/umbrales";
 
 export type Semaforo = "verde" | "amarillo" | "rojo";
 
@@ -90,16 +84,7 @@ export const MODULOS: Record<ModuloId, InfoModulo> = {
   },
 };
 
-export const ORDEN_MODULOS: ModuloId[] = [
-  "confort",
-  "iluminacion",
-  "aire",
-  "ruido",
-  "aforo",
-  "accesos",
-  "perimetro",
-  "nodos",
-];
+export const ORDEN_MODULOS = Object.keys(MODULOS) as ModuloId[];
 
 export function esModuloId(id: string): id is ModuloId {
   return id in MODULOS;
@@ -111,8 +96,6 @@ export function eventosDeModulo(abiertos: Evento[], modulo: ModuloId, aula?: Aul
     (e) => CATALOGO_EVENTOS[e.tipo].modulo === modulo && (!aula || e.aula === aula),
   );
 }
-
-type Valores = Partial<Record<Magnitud, number | EstadoPuerta>>;
 
 /**
  * Traffic light for a module in one classroom: red if it has an open critical
@@ -131,53 +114,8 @@ export function semaforoModulo(
   if (evs.some((e) => e.severidad === "critico")) return "rojo";
   if (evs.length > 0) return "amarillo";
 
-  const n = (m: Magnitud): number | undefined => {
-    const v = valores[m];
-    return typeof v === "number" ? v : undefined;
-  };
-  switch (modulo) {
-    case "confort": {
-      const t = n("temperatura");
-      const hr = n("humedad");
-      if (t !== undefined && t > umbrales.umbralTemp) return "amarillo";
-      if (hr !== undefined && (hr < umbrales.hrMin || hr > umbrales.hrMax)) return "amarillo";
-      return "verde";
-    }
-    case "iluminacion": {
-      const lux = n("lux");
-      if (enClase && lux !== undefined && lux < umbrales.umbralLux) return "amarillo";
-      return "verde";
-    }
-    case "aire": {
-      const co2 = n("co2");
-      const pm = n("pm25");
-      if (co2 !== undefined && co2 >= umbrales.co2Aviso) return "amarillo";
-      if (pm !== undefined && pm > umbrales.pm25Max) return "amarillo";
-      return "verde";
-    }
-    case "ruido": {
-      const r = n("ruido");
-      if (r !== undefined && r > umbrales.umbralRuido) return "amarillo";
-      return "verde";
-    }
-    case "aforo": {
-      const o = n("ocupacion");
-      if (o !== undefined && o > umbrales.aforoMaximo) return "amarillo";
-      return "verde";
-    }
-    case "accesos":
-      return "verde"; // only event-driven
-    case "perimetro": {
-      const d = n("proximidad_ventana");
-      if (d !== undefined && d < umbrales.distVentana) return "amarillo";
-      return "verde";
-    }
-    case "nodos": {
-      const b = n("bateria");
-      if (b !== undefined && b < umbrales.bateriaBaja) return "amarillo";
-      return "verde";
-    }
-  }
+  const fuera = MODULOS[modulo].magnitudes.some((m) => fueraDeUmbral(m, valores[m], umbrales, enClase));
+  return fuera ? "amarillo" : "verde";
 }
 
 export const CLASE_SEMAFORO: Record<Semaforo, string> = {
@@ -193,9 +131,9 @@ export const ETIQUETA_SEMAFORO: Record<Semaforo, string> = {
 };
 
 /** Worst of two traffic lights (module card aggregates both classrooms). */
+const ORDEN_SEMAFORO: Semaforo[] = ["verde", "amarillo", "rojo"];
 export function peorSemaforo(a: Semaforo, b: Semaforo): Semaforo {
-  const orden: Semaforo[] = ["verde", "amarillo", "rojo"];
-  return orden[Math.max(orden.indexOf(a), orden.indexOf(b))];
+  return ORDEN_SEMAFORO[Math.max(ORDEN_SEMAFORO.indexOf(a), ORDEN_SEMAFORO.indexOf(b))];
 }
 
 /** Fondo tenue/translúcido para una lectura, según el semáforo de su módulo. */
@@ -221,17 +159,13 @@ export interface RiesgoAula {
  */
 export function riesgoAula(
   aula: AulaCodigo,
-  valores: Valores,
-  umbrales: Umbrales,
+  semaforos: Record<ModuloId, Semaforo>,
   abiertos: Evento[],
-  enClase: boolean,
 ): RiesgoAula {
   const evsAula = abiertos.filter((e) => e.aula === aula);
   const criticas = evsAula.filter((e) => e.severidad === "critico").length;
   const alertas = evsAula.filter((e) => e.severidad === "alerta").length;
-  const enObservacion = ORDEN_MODULOS.filter(
-    (m) => semaforoModulo(m, valores, umbrales, abiertos, aula, enClase) === "amarillo",
-  ).length;
+  const enObservacion = Object.values(semaforos).filter((s) => s === "amarillo").length;
   return {
     aula,
     criticas,

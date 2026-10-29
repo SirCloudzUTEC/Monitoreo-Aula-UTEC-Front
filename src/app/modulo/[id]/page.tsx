@@ -4,20 +4,31 @@
 // and classroom, its open events, applicable thresholds and a plain-language
 // explanation. Anomaly markers come from src/lib/anomaly (F9).
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { notFound, useParams, useSearchParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SerieChart, lineasUmbral } from "@/components/charts/serie-chart";
 import { EventoCard } from "@/components/events/evento-card";
 import { ModuleIcon } from "@/components/modules/module-icon";
+import { SectionCard } from "@/components/common/layout";
 import { MODULOS, esModuloId, eventosDeModulo } from "@/lib/modules";
 import { CODIGOS_AULA, getAula } from "@/lib/aulas";
-import { useEventosAbiertos, useUmbrales } from "@/lib/api/hooks";
+import { useEstados, useEventosAbiertos, useUmbrales } from "@/lib/api/hooks";
 import { SIN_SERIE, useSerie } from "@/lib/use-serie";
-import { ETIQUETA_MAGNITUD } from "@/lib/format";
-import type { AulaCodigo, Magnitud, ModuloId } from "@/lib/types";
+import { useVisible } from "@/lib/use-visible";
+import { plural } from "@/lib/format";
+import { lineasUmbral } from "@/lib/umbrales";
+import { ETIQUETA_MAGNITUD } from "@/lib/units";
+import type { AulaCodigo, Magnitud, ModuloId, Umbrales } from "@/lib/types";
+
+// recharts is the heaviest dependency of this page: load it after the first paint
+const SerieChart = dynamic(() => import("@/components/charts/serie-chart").then((m) => m.SerieChart), {
+  ssr: false,
+  loading: () => <Skeleton className="h-60 w-full rounded-lg" />,
+});
 
 const RANGOS = {
   "1h": { minutos: 60, pasoMin: 1, etiqueta: "1 hora" },
@@ -27,44 +38,62 @@ const RANGOS = {
 
 type RangoId = keyof typeof RANGOS;
 
+/** Classrooms that host this module's sensors (the window perimeter needs windows). */
+const tieneSensores = (modulo: ModuloId, a: AulaCodigo) => modulo !== "perimetro" || getAula(a).ventanas > 0;
+
 function ChartAula({
   aula,
   magnitud,
   rango,
+  umbrales,
 }: {
   aula: AulaCodigo;
   magnitud: Magnitud;
   rango: RangoId;
+  umbrales: Umbrales;
 }) {
-  const { umbrales } = useUmbrales();
   const r = RANGOS[rango];
-  const serie = useSerie(aula, magnitud, r.minutos, r.pasoMin);
-  if (SIN_SERIE.includes(magnitud))
-    return (
-      <p className="text-sm text-muted-foreground">
-        La puerta es un estado (abierta/cerrada/asegurada), no una serie numérica: sus cambios
-        quedan en el log de eventos.
-      </p>
-    );
-  return <SerieChart data={serie} magnitud={magnitud} umbrales={umbrales} />;
+  // off-screen charts neither fetch nor poll until scrolled into view
+  const [ref, visible] = useVisible<HTMLDivElement>();
+  const serie = useSerie(aula, magnitud, r.minutos, r.pasoMin, visible);
+  return (
+    <div ref={ref}>
+      {SIN_SERIE.includes(magnitud) ? (
+        <p className="text-sm text-muted-foreground">
+          La puerta es un estado (abierta/cerrada/asegurada), no una serie numérica: sus cambios
+          quedan en el log de eventos.
+        </p>
+      ) : (
+        <SerieChart data={serie} magnitud={magnitud} umbrales={umbrales} />
+      )}
+    </div>
+  );
 }
 
 export default function ModuloPage() {
+  // useSearchParams needs a Suspense boundary, or the whole route bails out of prerendering
+  return (
+    <Suspense>
+      <Modulo />
+    </Suspense>
+  );
+}
+
+function Modulo() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const { abiertos } = useEventosAbiertos();
+  const { nowMs } = useEstados();
   const { umbrales } = useUmbrales();
   const [rango, setRango] = useState<RangoId>("1h");
 
   if (!esModuloId(params.id)) notFound();
-  const modulo = params.id as ModuloId;
+  const modulo = params.id;
   const info = MODULOS[modulo];
   const evs = eventosDeModulo(abiertos, modulo);
 
-  // classrooms that actually have this module's sensors
-  const aulasFiltradas = CODIGOS_AULA.filter(
-    (a) => modulo !== "perimetro" || getAula(a).ventanas > 0,
-  );
+  const aulasFiltradas = CODIGOS_AULA.filter((a) => tieneSensores(modulo, a));
+  const sinSensores = CODIGOS_AULA.filter((a) => !tieneSensores(modulo, a));
   // si venimos de un click en el panel general, esa aula va primero
   const aulaDestacada = searchParams.get("aula");
   const aulas =
@@ -91,76 +120,67 @@ export default function ModuloPage() {
         <p className="text-base text-muted-foreground">
           {evs.length === 0
             ? "Sin alertas abiertas en este módulo."
-            : `${evs.length} alerta${evs.length === 1 ? "" : "s"} abierta${evs.length === 1 ? "" : "s"} en este módulo.`}{" "}
-          Viendo {RANGOS[rango].etiqueta.toLowerCase()} en {aulas.length} aula{aulas.length === 1 ? "" : "s"}.
+            : `${plural(evs.length, "alerta")} ${evs.length === 1 ? "abierta" : "abiertas"} en este módulo.`}{" "}
+          Viendo {RANGOS[rango].etiqueta.toLowerCase()} en {plural(aulas.length, "aula")}.
         </p>
       </div>
 
       <Card>
-        <CardContent className="pt-4 text-base text-muted-foreground">
-          {info.explicacion}
-        </CardContent>
+        <CardContent className="pt-4 text-base text-muted-foreground">{info.explicacion}</CardContent>
       </Card>
 
       {aulas.map((aula) => (
-        <Card key={aula}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xl">
-              <Link href={`/aula/${aula}`} className="hover:underline">
-                {getAula(aula).nombre}
-              </Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-8">
-            {info.magnitudes.map((m) => (
-              <div key={m}>
-                <h3 className="mb-2 text-base font-medium">{ETIQUETA_MAGNITUD[m]}</h3>
-                <ChartAula aula={aula} magnitud={m} rango={rango} />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <SectionCard
+          key={aula}
+          title={
+            <Link href={`/aula/${aula}`} className="hover:underline">
+              {getAula(aula).nombre}
+            </Link>
+          }
+          contentClassName="flex flex-col gap-8"
+        >
+          {info.magnitudes.map((m) => (
+            <div key={m}>
+              <h3 className="mb-2 text-base font-medium">{ETIQUETA_MAGNITUD[m]}</h3>
+              <ChartAula aula={aula} magnitud={m} rango={rango} umbrales={umbrales} />
+            </div>
+          ))}
+        </SectionCard>
       ))}
-      {modulo === "perimetro" && aulas.length < CODIGOS_AULA.length && (
+      {sinSensores.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          El aula A-1001 no tiene ventanas, por eso no aparece en este módulo.
+          {sinSensores.length === 1 ? `El aula ${sinSensores[0]} no tiene` : `Las aulas ${sinSensores.join(", ")} no tienen`}{" "}
+          ventanas, por eso no aparece{sinSensores.length === 1 ? "" : "n"} en este módulo.
         </p>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xl">Umbrales aplicables</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="grid gap-2 text-base sm:grid-cols-2">
-            {info.magnitudes.flatMap((m) =>
-              lineasUmbral(m, umbrales).map((l) => (
-                <li key={`${m}-${l.etiqueta}`} className="text-muted-foreground">
-                  {ETIQUETA_MAGNITUD[m]}: <span className="font-mono text-foreground">{l.etiqueta}</span>
-                </li>
-              )),
-            )}
-          </ul>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Los umbrales se editan en{" "}
-            <Link href="/ajustes" className="underline">
-              Ajustes
-            </Link>{" "}
-            (cuenta administradora o superusuaria).
-          </p>
-        </CardContent>
-      </Card>
+      <SectionCard title="Umbrales aplicables" contentClassName="">
+        <ul className="grid gap-2 text-base sm:grid-cols-2">
+          {info.magnitudes.flatMap((m) =>
+            lineasUmbral(m, umbrales).map((l) => (
+              <li key={`${m}-${l.etiqueta}`} className="text-muted-foreground">
+                {ETIQUETA_MAGNITUD[m]}: <span className="font-mono text-foreground">{l.etiqueta}</span>
+              </li>
+            )),
+          )}
+        </ul>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Los umbrales se editan en{" "}
+          <Link href="/ajustes" className="underline">
+            Ajustes
+          </Link>{" "}
+          (cuenta administradora o superusuaria).
+        </p>
+      </SectionCard>
 
       <section aria-label="Alertas abiertas del módulo">
-        <h2 className="mb-3 text-lg font-semibold">
-          Alertas abiertas ({evs.length})
-        </h2>
+        <h2 className="mb-3 text-lg font-semibold">Alertas abiertas ({evs.length})</h2>
         {evs.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sin alertas abiertas en este módulo. ✓</p>
         ) : (
           <div className="flex flex-col gap-2">
             {evs.map((e) => (
-              <EventoCard key={e.id_evento} evento={e} abierta />
+              <EventoCard key={e.id_evento} evento={e} abierta nowMs={nowMs} />
             ))}
           </div>
         )}

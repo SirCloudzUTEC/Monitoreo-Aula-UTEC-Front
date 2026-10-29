@@ -46,6 +46,10 @@ function createParticles(): Particle[] {
   return particles;
 }
 
+const COLOR_ERROR = "rgb(220, 120, 120)";
+const COLOR_TINTE = "rgb(55, 187, 236)";
+const COLOR_BASE = "rgb(235, 244, 250)";
+
 export function ParticleOrb({
   state = "listo",
   className,
@@ -108,16 +112,16 @@ export function ParticleOrb({
 
         const alpha = 0.15 + depth * 0.65;
         const dotSize = 0.5 + depth * 1.3;
-        ctx.fillStyle =
-          currentState === "error"
-            ? `rgba(220, 120, 120, ${alpha})`
-            : p.tint === 1
-              ? `rgba(55, 187, 236, ${alpha})`
-              : `rgba(235, 244, 250, ${alpha * 0.9})`;
+        // constant color strings + globalAlpha: no per-particle rgba() string to build and parse
+        const color = currentState === "error" ? COLOR_ERROR : p.tint === 1 ? COLOR_TINTE : COLOR_BASE;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = color === COLOR_BASE ? alpha * 0.9 : alpha;
         ctx.beginPath();
         ctx.arc(x, y, dotSize, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      ctx.globalAlpha = 1;
 
       if (!reducedMotion && !document.hidden) {
         raf = requestAnimationFrame(draw);

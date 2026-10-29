@@ -16,51 +16,14 @@ import {
   YAxis,
 } from "recharts";
 import type { Magnitud, Umbrales } from "@/lib/types";
-import type { PuntoSerie } from "@/lib/use-serie";
+import type { PuntoSerieApi as PuntoSerie } from "@/lib/api/endpoints";
 import { detectarAnomalias, type PuntoAnomalo } from "@/lib/anomaly/detector";
 import { horaCorta, fechaHoraCorta, formatearValor } from "@/lib/format";
+import { lineasUmbral } from "@/lib/umbrales";
 import { UNIDADES } from "@/lib/units";
 
-export interface LineaUmbral {
-  valor: number;
-  etiqueta: string;
-  color?: string;
-}
-
-/** Threshold reference lines that apply to a magnitude. */
-export function lineasUmbral(magnitud: Magnitud, u: Umbrales): LineaUmbral[] {
-  switch (magnitud) {
-    case "temperatura":
-      return [{ valor: u.umbralTemp, etiqueta: `Umbral ${u.umbralTemp} °C` }];
-    case "humedad":
-      return [
-        { valor: u.hrMin, etiqueta: `Mín ${u.hrMin} %` },
-        { valor: u.hrMax, etiqueta: `Máx ${u.hrMax} %` },
-      ];
-    case "co2":
-      return [
-        { valor: u.co2Aviso, etiqueta: `Aviso ${u.co2Aviso} ppm`, color: "#f59e0b" },
-        { valor: u.co2Alerta, etiqueta: `Alerta ${u.co2Alerta} ppm`, color: "#dc2626" },
-      ];
-    case "pm25":
-      return [{ valor: u.pm25Max, etiqueta: `Máx ${u.pm25Max} µg/m³` }];
-    case "lux":
-      return [
-        { valor: u.umbralLux, etiqueta: `Mín en clase ${u.umbralLux} lx`, color: "#f59e0b" },
-        { valor: u.luxObjetivo, etiqueta: `Objetivo ${u.luxObjetivo} lx`, color: "#10b981" },
-      ];
-    case "ruido":
-      return [{ valor: u.umbralRuido, etiqueta: `Umbral ${u.umbralRuido} dBA` }];
-    case "ocupacion":
-      return [{ valor: u.aforoMaximo, etiqueta: `Aforo máx ${u.aforoMaximo}`, color: "#dc2626" }];
-    case "proximidad_ventana":
-      return [{ valor: u.distVentana, etiqueta: `Distancia mín ${u.distVentana} m`, color: "#dc2626" }];
-    case "bateria":
-      return [{ valor: u.bateriaBaja, etiqueta: `Batería baja ${u.bateriaBaja} %`, color: "#f59e0b" }];
-    default:
-      return [];
-  }
-}
+const ETIQUETA_SERIE: Record<string, string> = { anomalia: "Anomalía" };
+const etiquetaTooltip = (t: unknown) => fechaHoraCorta(Number(t));
 
 interface Punto extends PuntoSerie {
   anomalia?: number; // y-value duplicated when the point is anomalous
@@ -123,11 +86,8 @@ export function SerieChart({
               unit={UNIDADES[magnitud] ? ` ${UNIDADES[magnitud]}` : ""}
             />
             <Tooltip
-              labelFormatter={(t) => fechaHoraCorta(Number(t))}
-              formatter={(v, nombre) => [
-                formatearValor(magnitud, Number(v)),
-                nombre === "anomalia" ? "Anomalía" : "Valor",
-              ]}
+              labelFormatter={etiquetaTooltip}
+              formatter={(v, nombre) => [formatearValor(magnitud, Number(v)), ETIQUETA_SERIE[String(nombre)] ?? "Valor"]}
             />
             {lineas.map((l) => (
               <ReferenceLine

@@ -27,6 +27,9 @@ export type NodoId =
 
 export type EstadoPuerta = "abierta" | "cerrada" | "asegurada";
 
+/** Latest value per magnitude of one classroom. */
+export type Valores = Partial<Record<Magnitud, number | EstadoPuerta>>;
+
 /** SYS-09.2 measurement format. `valor` is numeric except for `puerta`. */
 export interface Medicion {
   ts: string; // ISO-8601 with offset, e.g. 2026-09-03T14:05:00-05:00
@@ -172,13 +175,3 @@ export type ModuloId =
   | "accesos"
   | "perimetro"
   | "nodos";
-
-export interface Anomalia {
-  ts: string;
-  aula: AulaCodigo;
-  magnitud: Magnitud;
-  valor: number;
-  score: number;
-  metodo: "zscore" | "salto" | "iforest";
-  explicacion: string;
-}

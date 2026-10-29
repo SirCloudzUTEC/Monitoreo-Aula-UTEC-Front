@@ -19,11 +19,27 @@ export type PrioridadIncidente = "critica" | "alta" | "media" | "baja";
 
 export type EstadoIncidente = "abierto" | "en_atencion" | "resuelto" | "descartado";
 
+/** Chip colors shared by priority and state. */
+const TONO = {
+  rojo: "bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200",
+  naranja: "bg-orange-100 text-orange-900 dark:bg-orange-950/50 dark:text-orange-200",
+  ambar: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
+  verde: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
+  gris: "bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300",
+};
+
 export const CLASE_PRIORIDAD: Record<PrioridadIncidente, string> = {
-  critica: "bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200",
-  alta: "bg-orange-100 text-orange-900 dark:bg-orange-950/50 dark:text-orange-200",
-  media: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
-  baja: "bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300",
+  critica: TONO.rojo,
+  alta: TONO.naranja,
+  media: TONO.ambar,
+  baja: TONO.gris,
+};
+
+export const ETIQUETA_PRIORIDAD: Record<PrioridadIncidente, string> = {
+  critica: "Crítica",
+  alta: "Alta",
+  media: "Media",
+  baja: "Baja",
 };
 
 export const ETIQUETA_ESTADO_INCIDENTE: Record<EstadoIncidente, string> = {
@@ -34,10 +50,27 @@ export const ETIQUETA_ESTADO_INCIDENTE: Record<EstadoIncidente, string> = {
 };
 
 export const CLASE_ESTADO_INCIDENTE: Record<EstadoIncidente, string> = {
-  abierto: "bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200",
-  en_atencion: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200",
-  resuelto: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200",
-  descartado: "bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300",
+  abierto: TONO.rojo,
+  en_atencion: TONO.ambar,
+  resuelto: TONO.verde,
+  descartado: TONO.gris,
+};
+
+export type AccionIncidente = "atender" | "resuelto" | "descartado";
+
+const ATENDER = { accion: "atender", etiqueta: "Atender", variante: "outline" } as const;
+const RESOLVER = { accion: "resuelto", etiqueta: "Resolver", variante: "default" } as const;
+const DESCARTAR = { accion: "descartado", etiqueta: "Descartar", variante: "ghost" } as const;
+
+/** Staff actions available in each state (closed reports have none). */
+export const ACCIONES_INCIDENTE: Record<
+  EstadoIncidente,
+  readonly { accion: AccionIncidente; etiqueta: string; variante: "outline" | "default" | "ghost" }[]
+> = {
+  abierto: [ATENDER, RESOLVER, DESCARTAR],
+  en_atencion: [RESOLVER, DESCARTAR],
+  resuelto: [],
+  descartado: [],
 };
 
 export interface IncidenteCatalogo {

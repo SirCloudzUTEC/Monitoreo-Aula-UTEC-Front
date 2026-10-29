@@ -1,29 +1,15 @@
 // Formatting helpers for the UI (Spanish locale, Lima wall time).
 
-import type { EstadoAula, EstadoPuerta, Magnitud } from "@/lib/types";
+import type { EstadoAula, EstadoPuerta, Magnitud, Severidad } from "@/lib/types";
 import { LIMA_OFFSET_MS, DIAS_SEMANA } from "@/lib/schedule";
-import { UNIDADES } from "@/lib/units";
-
-const DECIMALES: Partial<Record<Magnitud, number>> = {
-  temperatura: 1,
-  humedad: 0,
-  co2: 0,
-  pm25: 1,
-  voc: 0,
-  lux: 0,
-  ruido: 1,
-  ocupacion: 0,
-  proximidad_ventana: 2,
-  bateria: 0,
-};
+import { MAGNITUDES } from "@/lib/units";
 
 /** "24.3 °C", "812 ppm", "abierta"… */
 export function formatearValor(magnitud: Magnitud, valor: number | EstadoPuerta | undefined): string {
   if (valor === undefined) return "—";
   if (typeof valor === "string") return valor;
-  const dec = DECIMALES[magnitud] ?? 0;
-  const unidad = UNIDADES[magnitud];
-  return `${valor.toFixed(dec)}${unidad ? ` ${unidad}` : ""}`;
+  const { decimales = 0, unidad } = MAGNITUDES[magnitud];
+  return `${valor.toFixed(decimales)}${unidad ? ` ${unidad}` : ""}`;
 }
 
 function limaParts(ms: number): Date {
@@ -75,18 +61,36 @@ export const CLASE_ESTADO: Record<EstadoAula, string> = {
   Alerta: "bg-red-600 text-white",
 };
 
-export const ETIQUETA_MAGNITUD: Record<Magnitud, string> = {
-  temperatura: "Temperatura",
-  humedad: "Humedad relativa",
-  co2: "CO₂",
-  pm25: "PM2.5",
-  voc: "VOC",
-  lux: "Iluminancia",
-  ruido: "Ruido",
-  presencia: "Presencia",
-  ocupacion: "Ocupación",
-  puerta: "Puerta",
-  proximidad_ventana: "Proximidad a ventana",
-  bateria: "Batería",
-  latido: "Latido",
+/** Same states for the dark classroom TV screen. */
+export const CLASE_ESTADO_TV: Record<EstadoAula, string> = {
+  Cerrada: "bg-zinc-700 text-zinc-100",
+  Libre: "bg-sky-600 text-white",
+  EnClase: "bg-emerald-600 text-white",
+  Alerta: "bg-red-600 text-white",
 };
+
+export const ETIQUETA_SEVERIDAD: Record<Severidad, string> = {
+  info: "Info",
+  alerta: "Alerta",
+  critico: "Crítico",
+};
+
+export const CLASE_SEVERIDAD: Record<Severidad, string> = {
+  info: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
+  alerta: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  critico: "bg-red-600 text-white",
+};
+
+/** "1 alerta", "3 alertas"; `pl` for irregular plurals. */
+export function plural(n: number, sing: string, pl = `${sing}s`): string {
+  return `${n} ${n === 1 ? sing : pl}`;
+}
+
+/** "hace 7 min", "hace 3 h", "hace 2 d" */
+export function haceCuanto(ms: number): string {
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return `hace ${Math.max(1, min)} min`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `hace ${h} h`;
+  return `hace ${Math.round(h / 24)} d`;
+}

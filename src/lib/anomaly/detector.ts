@@ -5,7 +5,8 @@
 // Implemented in plain TypeScript: at this data volume a full TF.js runtime
 // adds ~1 MB of bundle for no accuracy gain (see docs/DECISIONES.md).
 
-import { mulberry32 } from "@/lib/simulator/rng";
+import { mulberry32 } from "@/lib/anomaly/rng";
+import { MAGNITUDES } from "@/lib/units";
 import type { Magnitud } from "@/lib/types";
 
 export const VENTANA = 60;
@@ -17,20 +18,6 @@ export interface PuntoAnomalo {
   metodo: "zscore" | "salto" | "iforest";
   explicacion: string;
 }
-
-/** Max plausible change between consecutive samples, per magnitude. */
-const SALTO_MAX: Partial<Record<Magnitud, number>> = {
-  temperatura: 1.5,
-  humedad: 6,
-  co2: 200,
-  pm25: 15,
-  voc: 60,
-  lux: 250,
-  ruido: 15,
-  ocupacion: 8,
-  proximidad_ventana: 3,
-  bateria: 5,
-};
 
 function mean(xs: number[]): number {
   return xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -65,7 +52,7 @@ export function zscoreAnomalias(valores: number[], umbralZ = 3): PuntoAnomalo[] 
 
 /** Sudden jump between consecutive samples beyond the plausible physical rate. */
 export function saltoAnomalias(valores: number[], magnitud: Magnitud): PuntoAnomalo[] {
-  const max = SALTO_MAX[magnitud];
+  const max = MAGNITUDES[magnitud].saltoMax;
   if (!max) return [];
   const out: PuntoAnomalo[] = [];
   for (let i = 1; i < valores.length; i++) {

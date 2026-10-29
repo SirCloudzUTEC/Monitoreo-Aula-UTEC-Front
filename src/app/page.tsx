@@ -3,7 +3,7 @@
 // F1 — general dashboard: per-classroom summary + the 8 domain modules.
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { PanelAdmin } from "@/components/admin/panel-admin";
 import { AulaSummaryCard } from "@/components/modules/aula-summary-card";
@@ -11,9 +11,8 @@ import { ModuleCard } from "@/components/modules/module-card";
 import { ORDEN_MODULOS, riesgoAula } from "@/lib/modules";
 import { useApp } from "@/lib/store";
 import { CODIGOS_AULA } from "@/lib/aulas";
-import { useEstados, useEventosAbiertos, useHorario, useUmbrales } from "@/lib/api/hooks";
-import { horaLarga } from "@/lib/format";
-import { claseEnCurso } from "@/lib/schedule";
+import { useEstados, useEventosAbiertos, useSemaforos } from "@/lib/api/hooks";
+import { horaLarga, plural } from "@/lib/format";
 import type { AulaCodigo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -21,20 +20,21 @@ const MAX_AULAS_VISIBLES = 4;
 
 export default function DashboardPage() {
   const { abiertos, listo: alertasListas } = useEventosAbiertos();
-  const { estados, valores, nowMs: simNowMs, listo } = useEstados();
-  const { umbrales } = useUmbrales();
-  const { horario } = useHorario();
+  const { estados, nowMs, listo } = useEstados();
+  const { semaforos } = useSemaforos();
   const prefsAulas = useApp((s) => s.prefsAulas);
   const [expandido, setExpandido] = useState(false);
 
   const sinAcuse = abiertos.filter((e) => !e.acuse).length;
   const aulasLibres = CODIGOS_AULA.filter((a) => estados[a] === "Libre").length;
 
-  const fecha = new Date(simNowMs);
-  const riesgos = CODIGOS_AULA.map((a) =>
-    riesgoAula(a, valores[a], umbrales, abiertos, claseEnCurso(horario, a, fecha)),
+  const enRiesgo = useMemo(
+    () =>
+      CODIGOS_AULA.map((a) => riesgoAula(a, semaforos[a], abiertos))
+        .filter((r) => r.score > 0)
+        .sort((a, b) => b.score - a.score),
+    [semaforos, abiertos],
   );
-  const enRiesgo = riesgos.filter((r) => r.score > 0).sort((a, b) => b.score - a.score);
   const hayRiesgo = enRiesgo.length > 0;
 
   // Selección manual (ajustes): se parte de esas aulas; sin selección, orden por riesgo.
@@ -56,13 +56,13 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Panel general</h1>
         <p className="text-base text-muted-foreground">
-          {listo && simNowMs ? `Estado en vivo a las ${horaLarga(simNowMs)}` : "Cargando estado en vivo…"} ·{" "}
+          {listo && nowMs ? `Estado en vivo a las ${horaLarga(nowMs)}` : "Cargando estado en vivo…"} ·{" "}
           {listo ? `${aulasLibres} de ${CODIGOS_AULA.length} aulas libres` : "comprobando aulas…"} ·{" "}
           {!alertasListas ? (
             <span className="font-medium">comprobando alertas…</span>
           ) : sinAcuse > 0 ? (
             <span className="font-medium text-red-600">
-              {sinAcuse} alerta{sinAcuse === 1 ? "" : "s"} sin acuse
+              {plural(sinAcuse, "alerta")} sin acuse
             </span>
           ) : (
             <span className="font-medium text-emerald-600">sin alertas pendientes</span>
@@ -102,9 +102,7 @@ export default function DashboardPage() {
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {hayRiesgo
-              ? `Ver ${restantes} aula${restantes === 1 ? "" : "s"} más en riesgo`
-              : `Ver ${restantes} aula${restantes === 1 ? "" : "s"} más`}
+            Ver {plural(restantes, "aula")} más{hayRiesgo ? " en riesgo" : ""}
             <ChevronDownIcon className="size-4" aria-hidden />
           </button>
         )}

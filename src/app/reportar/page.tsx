@@ -11,20 +11,21 @@ import {
   CATALOGO_INCIDENTES,
   CATEGORIAS_ORDENADAS,
   CLASE_PRIORIDAD,
+  ETIQUETA_PRIORIDAD,
   destinatariosDe,
   validarBorrador,
   type CategoriaIncidente,
 } from "@/lib/incidents/catalog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Chip, PageHeader } from "@/components/common/layout";
+import { SelectSimple } from "@/components/common/form";
 import { crearIncidente } from "@/lib/api/endpoints";
 import { mensajeDeError } from "@/lib/api/client";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+const OPCIONES_CATEGORIA = Object.fromEntries(
+  CATEGORIAS_ORDENADAS.map((c) => [c, CATALOGO_INCIDENTES[c].nombre]),
+) as Record<CategoriaIncidente, string>;
 
 interface ReporteGuardado {
   id: number;
@@ -65,46 +66,31 @@ export default function ReportarPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <header>
-        <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight md:text-4xl">
-          <SirenIcon className="size-8 text-primary" aria-hidden />
-          Reportar un incidente
-        </h1>
-        <p className="mt-2 text-base text-muted-foreground">
-          Tu reporte llega al personal correspondiente según la categoría.
-          En emergencias graves llama primero a Seguridad UTEC o al 105/106.
-        </p>
-      </header>
+      <PageHeader
+        icon={SirenIcon}
+        title="Reportar un incidente"
+        subtitle="Tu reporte llega al personal correspondiente según la categoría. En emergencias graves llama primero a Seguridad UTEC o al 105/106."
+      />
 
       <div className="glow-border space-y-4 rounded-xl border bg-card p-4 shadow-sm">
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="categoria">
             ¿Qué ocurrió?
           </label>
-          <Select
+          <SelectSimple
+            id="categoria"
             value={categoria}
-            onValueChange={(v) => setCategoria(v as CategoriaIncidente)}
-          >
-            <SelectTrigger id="categoria" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIAS_ORDENADAS.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {CATALOGO_INCIDENTES[c].nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={setCategoria}
+            opciones={OPCIONES_CATEGORIA}
+            className="w-full"
+          />
           <p className="text-xs text-muted-foreground">{info.ejemplos}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span
-            className={`rounded-full px-2.5 py-0.5 font-medium capitalize ${CLASE_PRIORIDAD[info.prioridad]}`}
-          >
-            Prioridad {info.prioridad}
-          </span>
+          <Chip clase={CLASE_PRIORIDAD[info.prioridad]}>
+            Prioridad {ETIQUETA_PRIORIDAD[info.prioridad].toLowerCase()}
+          </Chip>
           <span className="text-muted-foreground">
             Se notificará a: <strong>{destinatariosDe(categoria)}</strong>
           </span>
@@ -123,13 +109,12 @@ export default function ReportarPage() {
           <label className="text-sm font-medium" htmlFor="ubicacion">
             ¿Dónde?
           </label>
-          <input
+          <Input
             id="ubicacion"
             value={ubicacion}
             onChange={(e) => setUbicacion(e.target.value)}
             maxLength={120}
             placeholder="Aula, piso o zona (ej. L-419, piso 4)"
-            className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
 

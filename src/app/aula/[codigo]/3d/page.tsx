@@ -5,7 +5,7 @@
 // sensors); one click on the expand button goes fullscreen for easy
 // navigation. Reference frame matches the user's photo viewpoint.
 
-import { use, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { notFound } from "next/navigation";
@@ -22,8 +22,9 @@ import {
   Rows3Icon,
   SquareStackIcon,
 } from "lucide-react";
-import aulasData from "@/data/aulas.json";
-import type { Aula, NodoId } from "@/lib/types";
+import { getAula } from "@/lib/aulas";
+import { useAulaParam } from "@/lib/use-aula-param";
+import type { NodoId } from "@/lib/types";
 import {
   CAPAS_TODAS,
   NODO_META,
@@ -54,16 +55,14 @@ const CAPA_DEFS: { id: keyof Capas; label: string; icon: typeof BoxIcon }[] = [
   { id: "sensores", label: "Sensores", icon: RadioIcon },
 ];
 
-export default function Aula3DPage({
-  params,
-}: {
-  params: Promise<{ codigo: string }>;
-}) {
-  const { codigo } = use(params);
-  const aula = useMemo(
-    () => (aulasData as Aula[]).find((a) => a.codigo === codigo),
-    [codigo],
-  );
+/** Translucent pill floating over the scene. */
+const PILDORA =
+  "inline-flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-xs text-white/85 backdrop-blur hover:bg-black/75 hover:text-white";
+
+export default function Aula3DPage() {
+  const codigo = useAulaParam("codigo");
+  const aula = codigo ? getAula(codigo) : null;
+  const estimada = useMemo(() => (aula ? buildLayout(aula).estimada : false), [aula]);
   const [selected, setSelected] = useState<NodoId | null>(null);
   const [sceneKey, setSceneKey] = useState(0);
   const [capas, setCapas] = useState<Capas>(CAPAS_TODAS);
@@ -89,7 +88,6 @@ export default function Aula3DPage({
   if (!aula) notFound();
 
   const meta = selected ? NODO_META[selected] : null;
-  const lay = buildLayout(aula);
 
   return (
     <div
@@ -108,13 +106,13 @@ export default function Aula3DPage({
       <div className="absolute left-3 top-3 flex items-center gap-2">
         <Link
           href={`/aula/${aula.codigo}`}
-          className="inline-flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-xs text-white/85 backdrop-blur hover:bg-black/75 hover:text-white"
+          className={PILDORA}
         >
           <ArrowLeftIcon className="size-3.5" aria-hidden />
           {aula.nombre}
         </Link>
         <span className="rounded-full bg-[#37bbec]/15 px-2.5 py-1 text-[11px] text-[#7fd4f5] backdrop-blur">
-          Gemelo 3D{lay.estimada ? " · proporciones estimadas de fotos" : ""}
+          Gemelo 3D{estimada ? " · proporciones estimadas de fotos" : ""}
         </span>
       </div>
 
@@ -123,7 +121,7 @@ export default function Aula3DPage({
         <button
           type="button"
           onClick={() => setSceneKey((k) => k + 1)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-black/55 px-2.5 py-1.5 text-xs text-white/85 backdrop-blur hover:bg-black/75 hover:text-white"
+          className={PILDORA}
         >
           <RotateCcwIcon className="size-3.5" aria-hidden />
           Reiniciar vista

@@ -8,177 +8,114 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { DownloadIcon, FileUpIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { PlanoSvg, type PlanoImportado } from "@/components/plano/plano-svg";
-import {
-  parsePlano,
-  PLANTILLA_CSV,
-  PLANTILLA_JSON,
-  type ResultadoImport,
-} from "@/lib/plano/import";
+import { PageHeader, SectionCard, Vacio } from "@/components/common/layout";
+import { SelectSimple, opcionesDe } from "@/components/common/form";
+import { parsePlano, PLANTILLA_CSV, PLANTILLA_JSON } from "@/lib/plano/import";
 import { descargarArchivo, saveLocal } from "@/lib/data/storage";
+import { mensajeDeError } from "@/lib/api/client";
+import { useHabilitado } from "@/lib/api/hooks";
 import { CODIGOS_AULA, getAula } from "@/lib/aulas";
 import { useApp } from "@/lib/store";
-import { puede } from "@/lib/auth/identity";
 import { useOnline } from "@/lib/use-online";
 import type { AulaCodigo } from "@/lib/types";
 
+const PLANTILLAS = [
+  { archivo: "plantilla_plano.csv", contenido: PLANTILLA_CSV, tipo: "text/csv", etiqueta: "Plantilla CSV" },
+  { archivo: "plantilla_plano.json", contenido: PLANTILLA_JSON, tipo: "application/json", etiqueta: "Plantilla JSON" },
+];
+
+const OPCIONES_AULA = opcionesDe(CODIGOS_AULA);
+
 export default function ImportarPage() {
-  const cuenta = useApp((s) => s.cuenta);
-  const admin = cuenta ? puede(cuenta, "gestionar_dispositivos") : false;
+  const admin = useHabilitado("gestionar_dispositivos");
   const online = useOnline();
   const autorizar = useApp((s) => s.autorizar);
   const [aula, setAula] = useState<AulaCodigo>("L-419");
-  const [resultado, setResultado] = useState<
-    (ResultadoImport & { nombre: string }) | null
-  >(null);
+  const [plano, setPlano] = useState<Required<PlanoImportado> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const onArchivo = async (file: File) => {
     try {
-      const texto = await file.text();
-      const r = parsePlano(file.name, texto);
-      setResultado({ ...r, nombre: file.name });
+      const r = await parsePlano(file.name, await file.text());
+      setPlano({ puntos: r.puntos, nombre: file.name, origen: r.origen });
       if (r.aviso) toast.info(r.aviso);
-      toast.success(
-        `Contorno leído: ${r.puntos.length} puntos (${r.origen.toUpperCase()}).`,
-      );
+      toast.success(`Contorno leído: ${r.puntos.length} puntos (${r.origen.toUpperCase()}).`);
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "No se pudo leer el archivo.",
-      );
-      setResultado(null);
+      toast.error(mensajeDeError(e, "No se pudo leer el archivo."));
+      setPlano(null);
     }
   };
 
   const guardar = async () => {
-    if (
-      !resultado ||
-      !admin ||
-      !online ||
-      !(await autorizar("gestionar_dispositivos"))
-    )
-      return;
-    const plano: PlanoImportado = {
-      puntos: resultado.puntos,
-      nombre: resultado.nombre,
-      origen: resultado.origen,
-    };
+    if (!plano || !admin || !online || !(await autorizar("gestionar_dispositivos"))) return;
     saveLocal(`plano:${aula}`, plano);
     toast.success(`Plano guardado para ${aula}.`);
   };
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-3">
-          <FileUpIcon className="size-7 text-primary" aria-hidden />
-          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Importar plano</h1>
+      <PageHeader
+        icon={FileUpIcon}
+        title="Importar plano"
+        subtitle={
+          <>
+            Sube el contorno del aula como <strong>CSV</strong> (un punto “x,y” por línea, en metros),{" "}
+            <strong>DXF</strong> (solo entidades LINE y LWPOLYLINE) o <strong>JSON</strong> (polígono). Se muestra
+            una vista previa y puedes guardarlo para el plano del aula.
+          </>
+        }
+      />
+
+      <SectionCard title="1 · Elige aula y archivo" contentClassName="flex flex-wrap items-center gap-3">
+        <SelectSimple
+          value={aula}
+          onChange={setAula}
+          opciones={OPCIONES_AULA}
+          className="w-32"
+          ariaLabel="Aula destino"
+        />
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,.txt,.dxf,.json"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onArchivo(f);
+            e.target.value = "";
+          }}
+        />
+        <Button onClick={() => inputRef.current?.click()}>Elegir archivo…</Button>
+        <div className="ml-auto flex gap-2">
+          {PLANTILLAS.map((p) => (
+            <Button
+              key={p.archivo}
+              variant="outline"
+              size="sm"
+              onClick={() => descargarArchivo(p.archivo, p.contenido, p.tipo)}
+            >
+              <DownloadIcon className="size-4" aria-hidden /> {p.etiqueta}
+            </Button>
+          ))}
         </div>
-        <p className="text-base text-muted-foreground">
-          Sube el contorno del aula como <strong>CSV</strong> (un punto “x,y” por
-          línea, en metros), <strong>DXF</strong> (solo entidades LINE y
-          LWPOLYLINE) o <strong>JSON</strong> (polígono). Se muestra una vista
-          previa y puedes guardarlo para el plano del aula.
-        </p>
-      </div>
+      </SectionCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xl">1 · Elige aula y archivo</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3">
-          <Select value={aula} onValueChange={(v) => setAula(v as AulaCodigo)}>
-            <SelectTrigger className="w-32" aria-label="Aula destino">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CODIGOS_AULA.map((a) => (
-                <SelectItem key={a} value={a}>
-                  {a}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".csv,.txt,.dxf,.json"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void onArchivo(f);
-              e.target.value = "";
-            }}
-          />
-          <Button onClick={() => inputRef.current?.click()}>
-            Elegir archivo…
-          </Button>
-          <div className="ml-auto flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                descargarArchivo("plantilla_plano.csv", PLANTILLA_CSV, "text/csv")
-              }
-            >
-              <DownloadIcon className="size-4" aria-hidden /> Plantilla CSV
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                descargarArchivo(
-                  "plantilla_plano.json",
-                  PLANTILLA_JSON,
-                  "application/json",
-                )
-              }
-            >
-              <DownloadIcon className="size-4" aria-hidden /> Plantilla JSON
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xl">2 · Vista previa</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {resultado ? (
-            <>
-              <PlanoSvg
-                aula={getAula(aula)}
-                plano={{
-                  puntos: resultado.puntos,
-                  nombre: resultado.nombre,
-                  origen: resultado.origen,
-                }}
-                className="w-full"
-              />
-              <p className="mt-2 text-xs text-muted-foreground">
-                {resultado.nombre} · {resultado.puntos.length} puntos · origen{" "}
-                {resultado.origen.toUpperCase()}
-              </p>
-            </>
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Aún no hay archivo cargado.
+      <SectionCard title="2 · Vista previa" contentClassName="">
+        {plano ? (
+          <>
+            <PlanoSvg aula={getAula(aula)} plano={plano} className="w-full" />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {plano.nombre} · {plano.puntos.length} puntos · origen {plano.origen.toUpperCase()}
             </p>
-          )}
-        </CardContent>
-      </Card>
+          </>
+        ) : (
+          <Vacio>Aún no hay archivo cargado.</Vacio>
+        )}
+      </SectionCard>
 
       <div className="flex items-center gap-3">
-        <Button onClick={guardar} disabled={!resultado || !admin || !online}>
+        <Button onClick={guardar} disabled={!plano || !admin || !online}>
           Guardar plano para {aula}
         </Button>
         <Link href={`/aula/${aula}`} className="text-sm underline">

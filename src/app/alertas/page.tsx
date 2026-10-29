@@ -7,89 +7,60 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { BellRingIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EventoCard } from "@/components/events/evento-card";
+import { PageHeader, Vacio } from "@/components/common/layout";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { EventoCard, ETIQUETA_SEVERIDAD } from "@/components/events/evento-card";
+  FiltroAulaSelect,
+  FiltroSeveridadSelect,
+  type FiltroAula,
+  type FiltroSeveridad,
+} from "@/components/common/form";
 import { estaEscalado } from "@/lib/store";
-import { CODIGOS_AULA } from "@/lib/aulas";
 import { useEstados, useEventosAbiertos, useEventosCerrados } from "@/lib/api/hooks";
 import { TIPOS_FUERA_NOMINAL } from "@/lib/events/catalog";
-import type { AulaCodigo, Evento, Severidad } from "@/lib/types";
+import { plural } from "@/lib/format";
 
-type FiltroAula = AulaCodigo | "todas";
-type FiltroSev = Severidad | "todas";
+const FUERA_NOMINAL = new Set<string>(TIPOS_FUERA_NOMINAL);
 
 export default function AlertasPage() {
   const { abiertos } = useEventosAbiertos();
   const cerrados = useEventosCerrados();
-  const { nowMs: simNowMs } = useEstados();
+  const { nowMs } = useEstados();
   const [aula, setAula] = useState<FiltroAula>("todas");
-  const [sev, setSev] = useState<FiltroSev>("todas");
+  const [sev, setSev] = useState<FiltroSeveridad>("todas");
 
-  const filtrar = (evs: Evento[]) =>
-    evs.filter(
-      (e) => (aula === "todas" || e.aula === aula) && (sev === "todas" || e.severidad === sev),
-    );
-
-  const abiertas = filtrar(abiertos).sort((a, b) => b.ts.localeCompare(a.ts));
-  const escaladas = abiertas.filter((e) => estaEscalado(e, simNowMs)).length;
-
-  const historial = useMemo(() => {
-    const fuera = new Set<string>(TIPOS_FUERA_NOMINAL);
-    return cerrados.filter((e) => fuera.has(e.tipo));
-  }, [cerrados]);
+  const { abiertas, historial } = useMemo(() => {
+    const pasa = (e: { aula: string; severidad: string }) =>
+      (aula === "todas" || e.aula === aula) && (sev === "todas" || e.severidad === sev);
+    return {
+      abiertas: abiertos.filter(pasa).sort((a, b) => b.ts.localeCompare(a.ts)),
+      historial: cerrados.filter((e) => FUERA_NOMINAL.has(e.tipo) && pasa(e)),
+    };
+  }, [abiertos, cerrados, aula, sev]);
+  const escaladas = abiertas.filter((e) => estaEscalado(e, nowMs)).length;
+  const filtrando = aula !== "todas" || sev !== "todas";
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-3">
-          <BellRingIcon className="size-7 text-primary" aria-hidden />
-          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Alertas</h1>
-          {escaladas > 0 && (
-            <span className="rounded-full bg-red-600 px-3 py-0.5 text-sm font-semibold text-white">
-              {escaladas} escalada{escaladas > 1 ? "s" : ""}
-            </span>
-          )}
-        </div>
-        <p className="text-base text-muted-foreground">
-          {abiertas.length === 0
+      <PageHeader
+        icon={BellRingIcon}
+        title="Alertas"
+        subtitle={
+          abiertas.length === 0
             ? "No hay alertas abiertas en ninguna aula."
-            : `${abiertas.length} alerta${abiertas.length === 1 ? "" : "s"} abierta${abiertas.length === 1 ? "" : "s"} en total.`}
-        </p>
-      </div>
+            : `${plural(abiertas.length, "alerta")} ${abiertas.length === 1 ? "abierta" : "abiertas"} en total.`
+        }
+      >
+        {escaladas > 0 && (
+          <span className="rounded-full bg-red-600 px-3 py-0.5 text-sm font-semibold text-white">
+            {plural(escaladas, "escalada")}
+          </span>
+        )}
+      </PageHeader>
 
       <div className="flex flex-wrap gap-2">
-        <Select value={aula} onValueChange={(v) => setAula(v as FiltroAula)}>
-          <SelectTrigger className="w-36" aria-label="Filtrar por aula">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas las aulas</SelectItem>
-            {CODIGOS_AULA.map((a) => (
-              <SelectItem key={a} value={a}>
-                {a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={sev} onValueChange={(v) => setSev(v as FiltroSev)}>
-          <SelectTrigger className="w-40" aria-label="Filtrar por severidad">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Toda severidad</SelectItem>
-            {(["critico", "alerta", "info"] as Severidad[]).map((s) => (
-              <SelectItem key={s} value={s}>
-                {ETIQUETA_SEVERIDAD[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <FiltroAulaSelect value={aula} onChange={setAula} />
+        <FiltroSeveridadSelect value={sev} onChange={setSev} />
       </div>
 
       <Tabs defaultValue="abiertas">
@@ -99,24 +70,23 @@ export default function AlertasPage() {
         </TabsList>
         <TabsContent value="abiertas" className="mt-3 flex flex-col gap-2">
           {abiertas.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No hay alertas abiertas. Todo en orden. ✓
-            </p>
+            <Vacio>No hay alertas abiertas. Todo en orden. ✓</Vacio>
           ) : (
-            abiertas.map((e) => <EventoCard key={e.id_evento} evento={e} abierta />)
+            abiertas.map((e) => <EventoCard key={e.id_evento} evento={e} abierta nowMs={nowMs} />)
           )}
         </TabsContent>
         <TabsContent value="historial" className="mt-3 flex flex-col gap-2">
           {historial.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Aún no hay eventos cerrados. El historial completo está en el{" "}
+            <Vacio>
+              {filtrando ? "Ningún evento cerrado coincide con los filtros." : "Aún no hay eventos cerrados."} El
+              historial completo está en el{" "}
               <Link href="/log" className="underline">
                 log de eventos
               </Link>
               .
-            </p>
+            </Vacio>
           ) : (
-            filtrar(historial).map((e) => <EventoCard key={e.id_evento} evento={e} />)
+            historial.map((e) => <EventoCard key={e.id_evento} evento={e} />)
           )}
         </TabsContent>
       </Tabs>

@@ -2,16 +2,8 @@
 
 import { AlertTriangleIcon } from "lucide-react";
 import { LECTURA_OBSOLETA_MS } from "@/lib/api/hooks";
+import { haceCuanto } from "@/lib/format";
 import { cn } from "@/lib/utils";
-
-/** "hace 7 min", "hace 3 h", "hace 2 d" */
-export function haceCuanto(ms: number): string {
-  const min = Math.round(ms / 60_000);
-  if (min < 60) return `hace ${Math.max(1, min)} min`;
-  const h = Math.round(min / 60);
-  if (h < 48) return `hace ${h} h`;
-  return `hace ${Math.round(h / 24)} d`;
-}
 
 /**
  * Warns when a room's newest reading is old (or it never reported): the values shown next to it

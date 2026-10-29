@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { validarPasswordNueva } from "@/app/ajustes/cambiar-password";
-import { ambitosPara, errorDeRol } from "@/app/usuarios/editar-usuario";
-import { nodosAdmitidos } from "@/app/dispositivos/nodos";
-import { haceCuanto } from "@/components/modules/aviso-obsoleto";
+import { ambitosPara, errorDeRol, validarPasswordNueva } from "@/lib/auth/identity";
+import { nodosAdmitidos } from "@/lib/dispositivos";
+import { haceCuanto } from "@/lib/format";
 
 describe("validarPasswordNueva", () => {
   it("mirrors the backend bounds and rules", () => {

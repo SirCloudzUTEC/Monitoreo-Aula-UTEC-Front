@@ -5,14 +5,26 @@
 
 const PREFIX = "aula-digital:";
 
-export function loadLocal<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
+/** Raw stored JSON, or null (missing, blocked or SSR). */
+export function loadLocalRaw(key: string): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(PREFIX + key);
+    return window.localStorage.getItem(PREFIX + key);
+  } catch {
+    return null;
+  }
+}
+
+export function parseLocal<T>(raw: string | null, fallback: T): T {
+  try {
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
   }
+}
+
+export function loadLocal<T>(key: string, fallback: T): T {
+  return parseLocal(loadLocalRaw(key), fallback);
 }
 
 export function saveLocal<T>(key: string, value: T): void {

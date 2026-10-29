@@ -9,7 +9,6 @@ import type {
   AulaCodigo,
   BloqueHorario,
   EstadoAula,
-  EstadoPuerta,
   Evento,
   Horario,
   Magnitud,
@@ -17,6 +16,7 @@ import type {
   Severidad,
   TipoEvento,
   Umbrales,
+  Valores,
 } from "@/lib/types";
 import type {
   CategoriaIncidente,
@@ -98,8 +98,6 @@ export const cambiarRol = (id: number, rol: Rol, ambitos: Ambito[] = []) =>
 
 // ---------------------------------------------------------------------------
 // aulas: estado, lecturas, serie
-
-type Valores = Partial<Record<Magnitud, number | EstadoPuerta>>;
 
 export interface EstadoAulaVivo {
   aula: AulaCodigo;
@@ -367,9 +365,3 @@ export const enviarPush = (body: {
   cuerpo: string;
   path?: string;
 }) => api<{ enviados: number }>("/api/push/enviar", { method: "POST", body });
-
-// ---------------------------------------------------------------------------
-// contrato
-
-export const enumsDelBackend = () =>
-  api<Record<string, string[]>>("/api/meta/enums", { publico: true });

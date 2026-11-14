@@ -33,8 +33,16 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { AvisoErrores } from "@/components/layout/aviso-errores";
 import { RelojLima } from "@/components/layout/reloj-lima";
 import { useApp } from "@/lib/store";
-import { CODIGOS_AULA } from "@/lib/aulas";
-import { useCerrarSesion, useEstados, useEventosAbiertos } from "@/lib/api/hooks";
+import {
+  CODIGOS_AULA,
+  CODIGOS_MODELO_AULA,
+  esAulaMonitoreada,
+} from "@/lib/aulas";
+import {
+  useCerrarSesion,
+  useEstados,
+  useEventosAbiertos,
+} from "@/lib/api/hooks";
 import { puede, type Permiso } from "@/lib/auth/identity";
 import { ETIQUETA_ESTADO, CLASE_ESTADO } from "@/lib/format";
 
@@ -59,6 +67,12 @@ const NAV: NavItem[] = [
     href: "/reportes",
     etiqueta: "Reportes",
     icono: ClipboardListIcon,
+    soloDesktop: true,
+  },
+  {
+    href: "/aula/L-418",
+    etiqueta: "Aula L-418 · modelo 3D",
+    icono: DoorOpenIcon,
     soloDesktop: true,
   },
   {
@@ -103,6 +117,12 @@ function activo(pathname: string, href: string): boolean {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const codigoRuta = pathname.startsWith("/aula/")
+    ? pathname.split("/")[2]
+    : "";
+  const soloModelo =
+    CODIGOS_MODELO_AULA.some((a) => a === codigoRuta) &&
+    !esAulaMonitoreada(codigoRuta);
   const [sidebarAbierto, setSidebarAbierto] = useState(true);
   const online = useOnline();
   const { abiertos } = useEventosAbiertos();
@@ -110,7 +130,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const cuenta = useApp((s) => s.cuenta);
   const cerrarSesion = useCerrarSesion();
 
-  if (pathname.startsWith("/pantalla") || pathname === "/acceso") return <>{children}</>;
+  if (pathname.startsWith("/pantalla") || pathname === "/acceso")
+    return <>{children}</>;
 
   const sinAcuse = abiertos.filter((e) => !e.acuse).length;
   const navVisible = NAV.filter(
@@ -128,7 +149,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="hidden md:inline-flex"
             onClick={() => setSidebarAbierto((v) => !v)}
             aria-pressed={sidebarAbierto}
-            title={sidebarAbierto ? "Ocultar barra lateral" : "Mostrar barra lateral"}
+            title={
+              sidebarAbierto ? "Ocultar barra lateral" : "Mostrar barra lateral"
+            }
           >
             {sidebarAbierto ? (
               <PanelLeftCloseIcon className="size-5" aria-hidden />
@@ -149,11 +172,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={`/aula/${a}`}
                 className={cn(
                   "hidden rounded-full px-2.5 py-0.5 text-xs font-medium md:inline-block",
-                  antiguedadMs[a] === null ? "bg-muted text-muted-foreground" : CLASE_ESTADO[estados[a]],
+                  antiguedadMs[a] === null
+                    ? "bg-muted text-muted-foreground"
+                    : CLASE_ESTADO[estados[a]],
                 )}
                 title={`Estado de ${a}`}
               >
-                {a}: {antiguedadMs[a] === null ? "…" : ETIQUETA_ESTADO[estados[a]]}
+                {a}:{" "}
+                {antiguedadMs[a] === null ? "…" : ETIQUETA_ESTADO[estados[a]]}
               </Link>
             ))}
             <RelojLima />
@@ -193,7 +219,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         role="status"
         className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground"
       >
-        {online ? "Datos en vivo de los sensores de las aulas" : "Sin conexión con el servidor · solo lectura"}
+        {soloModelo
+          ? "Modelo fotográfico estimado · sin telemetría conectada"
+          : online
+            ? "Datos en vivo de los sensores de las aulas"
+            : "Sin conexión con el servidor · solo lectura"}
       </div>
       <AvisoErrores conectado={online} />
       <div className="flex flex-1">
@@ -244,26 +274,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* bottom tab bar (mobile) */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-background md:hidden">
-        {navVisible.filter((i) => !i.soloDesktop).map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]",
-              activo(pathname, item.href)
-                ? "text-primary"
-                : "text-muted-foreground",
-            )}
-          >
-            <item.icono className="size-5" aria-hidden />
-            {item.etiqueta.split(" ")[0]}
-            {item.conAlertas && sinAcuse > 0 && (
-              <span className="absolute right-1/2 top-1 inline-flex min-w-4 -translate-y-0 translate-x-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
-                {sinAcuse}
-              </span>
-            )}
-          </Link>
-        ))}
+        {navVisible
+          .filter((i) => !i.soloDesktop)
+          .map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]",
+                activo(pathname, item.href)
+                  ? "text-primary"
+                  : "text-muted-foreground",
+              )}
+            >
+              <item.icono className="size-5" aria-hidden />
+              {item.etiqueta.split(" ")[0]}
+              {item.conAlertas && sinAcuse > 0 && (
+                <span className="absolute right-1/2 top-1 inline-flex min-w-4 -translate-y-0 translate-x-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                  {sinAcuse}
+                </span>
+              )}
+            </Link>
+          ))}
       </nav>
     </div>
   );

@@ -65,5 +65,196 @@
       { "id": "parlantes", "nombre": "Parlantes de techo", "cantidad": 2 },
       { "id": "enchufes", "nombre": "Enchufes dobles", "cantidad": 4 }
     ]
+  },
+  {
+    "codigo": "L-418",
+    "nombre": "Aula L-418",
+    "largo": 11.8,
+    "ancho": 10.4,
+    "alto": 3.3,
+    "aforo": 32,
+    "puertas": 2,
+    "ventanas": 2,
+    "aireAcondicionado": null,
+    "datosEstimados": {
+      "origen": "fotografias",
+      "dimensionesProvisionales": true,
+      "conteosProvisionales": true,
+      "aforoSoloSimulacion": true,
+      "sensoresPropuestos": true,
+      "mesasConfirmadas": 32,
+      "equipoConfirmado": "laptops cerradas",
+      "observaciones": "Única entrada/salida: puerta junto al tacho. La puerta junto al escritorio pertenece al recinto reservado, no es acceso general. El volumen cerrado genera una planta con entrante y una zona amplia frente al ventanal exterior; interior no levantado. Envolvente y profundidad del recinto estimadas de las caras visibles en las fotos. Separación entre grupos conservada. 32 mesas trapezoidales confirmadas, en dos grupos de 16. Sillas, cantidades de laptops y luminarias aproximadas. Se observan ductos, pero no se ha confirmado aire acondicionado. La pantalla local y los nodos son propuestas, no equipos observados."
+    },
+    "nodos": [
+      "nodoAmbiental",
+      "nodoPuerta",
+      "nodoVentana1",
+      "nodoVentana2",
+      "procesadorAula"
+    ],
+    "posiciones": {
+      "nodoAmbiental": {
+        "x": 5.6,
+        "y": 6.2
+      },
+      "nodoPuerta": {
+        "x": 0.85,
+        "y": 10.4
+      },
+      "nodoVentana1": {
+        "x": 5.5,
+        "y": 0
+      },
+      "nodoVentana2": {
+        "x": 5.5,
+        "y": 10.4
+      },
+      "procesadorAula": {
+        "x": 0.3,
+        "y": 8.6
+      },
+      "puerta": {
+        "x": 0.85,
+        "y": 10.4
+      },
+      "puerta2": {
+        "x": 1.75,
+        "y": 2.4
+      },
+      "recintoReservado": {
+        "x": 1.3,
+        "y": 1.2
+      },
+      "mesaDocente": {
+        "x": 0.8,
+        "y": 3.15
+      },
+      "tacho": {
+        "x": 0.65,
+        "y": 9.95
+      },
+      "ventana1": {
+        "x": 5.5,
+        "y": 0
+      },
+      "ventana2": {
+        "x": 5.5,
+        "y": 10.4
+      },
+      "proyector": {
+        "x": 2.5,
+        "y": 6.4
+      },
+      "pantallaLocal": {
+        "x": 0.3,
+        "y": 8.6
+      }
+    },
+    "componentes": [
+      {
+        "id": "mesas",
+        "nombre": "Mesas individuales de estudiante (confirmadas)",
+        "cantidad": 32
+      },
+      {
+        "id": "sillas",
+        "nombre": "Sillas de estudiante con ruedas (estimadas)",
+        "cantidad": 32
+      },
+      {
+        "id": "laptops",
+        "nombre": "Laptops cerradas",
+        "cantidad": 32
+      },
+      {
+        "id": "pizarras",
+        "nombre": "Pizarras móviles",
+        "cantidad": 2
+      },
+      {
+        "id": "pantallaProyeccion",
+        "nombre": "Pantalla de proyección enrollable",
+        "cantidad": 1
+      },
+      {
+        "id": "proyector",
+        "nombre": "Proyector de techo",
+        "cantidad": 1,
+        "pos": {
+          "x": 2.5,
+          "y": 6.4
+        }
+      },
+      {
+        "id": "mesaDocente",
+        "nombre": "Mesa del docente junto a zona reservada",
+        "cantidad": 1,
+        "pos": {
+          "x": 0.8,
+          "y": 3.15
+        }
+      },
+      {
+        "id": "tacho",
+        "nombre": "Tacho junto a la entrada/salida",
+        "cantidad": 1,
+        "pos": {
+          "x": 0.65,
+          "y": 9.95
+        }
+      },
+      {
+        "id": "accesoPrincipal",
+        "nombre": "Única entrada/salida (junto al tacho)",
+        "cantidad": 1,
+        "pos": {
+          "x": 0.85,
+          "y": 10.4
+        }
+      },
+      {
+        "id": "zonaReservada",
+        "nombre": "Puerta de zona reservada (no es entrada/salida)",
+        "cantidad": 1,
+        "pos": {
+          "x": 1.75,
+          "y": 2.4
+        }
+      },
+      {
+        "id": "recintoReservado",
+        "nombre": "Recinto cerrado reservado (volumen estimado; interior no levantado)",
+        "cantidad": 1,
+        "pos": {
+          "x": 1.3,
+          "y": 1.2
+        }
+      },
+      {
+        "id": "armarios",
+        "nombre": "Armarios con frente de vidrio",
+        "cantidad": 3
+      },
+      {
+        "id": "ventiladores",
+        "nombre": "Ventiladores de pedestal",
+        "cantidad": 2
+      },
+      {
+        "id": "luminarias",
+        "nombre": "Barras LED (cantidad aproximada)",
+        "cantidad": 12
+      },
+      {
+        "id": "pantallaLocal",
+        "nombre": "Pantalla local propuesta (no observada)",
+        "cantidad": 1,
+        "pos": {
+          "x": 0.3,
+          "y": 8.6
+        }
+      }
+    ]
   }
 ]

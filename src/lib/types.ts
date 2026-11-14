@@ -2,6 +2,8 @@
 // the wire format is fixed in Spanish, so domain fields stay in Spanish too.
 
 export type AulaCodigo = "L-419" | "A-1001";
+/** Visual models are not automatically registered classrooms in Spring Boot. */
+export type ModeloAulaCodigo = AulaCodigo | "L-418";
 
 export type Magnitud =
   | "temperatura"
@@ -38,7 +40,11 @@ export interface Medicion {
 }
 
 export type Severidad = "info" | "alerta" | "critico";
-export const SEVERIDADES = ["info", "alerta", "critico"] as const satisfies readonly Severidad[];
+export const SEVERIDADES = [
+  "info",
+  "alerta",
+  "critico",
+] as const satisfies readonly Severidad[];
 
 export type TipoEvento =
   // nominal (info)
@@ -139,7 +145,7 @@ export interface PosicionPlano {
 }
 
 export interface Aula {
-  codigo: AulaCodigo;
+  codigo: ModeloAulaCodigo;
   nombre: string;
   largo: number; // m
   ancho: number; // m
@@ -147,10 +153,25 @@ export interface Aula {
   aforo: number;
   puertas: number;
   ventanas: number;
-  aireAcondicionado: boolean;
+  aireAcondicionado: boolean | null; // null: not confirmed by the photographs
+  datosEstimados?: {
+    origen: "fotografias";
+    dimensionesProvisionales: boolean;
+    conteosProvisionales: boolean;
+    aforoSoloSimulacion: boolean;
+    sensoresPropuestos: boolean;
+    mesasConfirmadas?: number;
+    equipoConfirmado?: string;
+    observaciones?: string;
+  };
   nodos: NodoId[];
   posiciones: Record<string, PosicionPlano>; // nodo/element id -> position
-  componentes: { id: string; nombre: string; cantidad: number; pos?: PosicionPlano }[];
+  componentes: {
+    id: string;
+    nombre: string;
+    cantidad: number;
+    pos?: PosicionPlano;
+  }[];
 }
 
 export interface BloqueHorario {

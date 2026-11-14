@@ -5,6 +5,7 @@
 
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
+import { ModelosAula } from "@/components/modules/modelos-aula";
 import { AulaSummaryCard } from "@/components/modules/aula-summary-card";
 import { CODIGOS_AULA } from "@/lib/aulas";
 
@@ -16,18 +17,26 @@ export default function TodasLasAulasPage() {
           href="/"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeftIcon className="size-4" aria-hidden /> Volver al panel general
+          <ArrowLeftIcon className="size-4" aria-hidden /> Volver al panel
+          general
         </Link>
-        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Todas las aulas</h1>
+        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+          Todas las aulas
+        </h1>
         <p className="text-base text-muted-foreground">
-          {CODIGOS_AULA.length} aula{CODIGOS_AULA.length === 1 ? "" : "s"} en el campus.
+          {CODIGOS_AULA.length} aula{CODIGOS_AULA.length === 1 ? "" : "s"} con
+          monitoreo configurado.
         </p>
       </div>
-      <section className="grid gap-5 xl:grid-cols-2" aria-label="Todas las aulas">
+      <section
+        className="grid gap-5 xl:grid-cols-2"
+        aria-label="Todas las aulas"
+      >
         {CODIGOS_AULA.map((a) => (
           <AulaSummaryCard key={a} aula={a} />
         ))}
       </section>
+      <ModelosAula />
     </div>
   );
 }

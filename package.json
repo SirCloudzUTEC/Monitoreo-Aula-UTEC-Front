@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit",
+    "test:e2e:models": "playwright test --config=playwright.models.config.ts",
+    "typecheck": "next typegen && tsc --noEmit",
     "setup:local": "node scripts/setup-local.mjs",
     "format": "prettier --write src tests scripts *.ts *.mts *.mjs"
   },

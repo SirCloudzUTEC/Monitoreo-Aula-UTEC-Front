@@ -31,6 +31,7 @@ import {
   type Capas,
 } from "@/components/three/classroom-layout";
 import { cn } from "@/lib/utils";
+import { L418 as L418_LAYOUT } from "./l418-layout";
 
 const cargando = () => (
   <div className="flex h-full items-center justify-center text-sm text-white/60">
@@ -39,14 +40,19 @@ const cargando = () => (
 );
 
 const ClassroomScene = dynamic(
-  () => import("@/components/three/classroom-scene").then((m) => m.ClassroomScene),
+  () =>
+    import("@/components/three/classroom-scene").then((m) => m.ClassroomScene),
   { ssr: false, loading: cargando },
 );
 
-// A-1001 has its own scene modelled from its photos (a1001-scene.tsx);
-// every other aula renders through the L-419 scene and its generic layout.
+// Photographed classrooms use dedicated geometry rather than the generic model.
 const A1001Scene = dynamic(
   () => import("@/components/three/a1001-scene").then((m) => m.A1001Scene),
+  { ssr: false, loading: cargando },
+);
+
+const L418Scene = dynamic(
+  () => import("@/components/three/l418-scene").then((m) => m.L418Scene),
   { ssr: false, loading: cargando },
 );
 
@@ -97,9 +103,10 @@ export function TwinViewer({
 
   const meta = selected ? NODO_META[selected] : null;
   const esA1001 = aula.codigo === "A-1001";
-  const Scene = esA1001 ? A1001Scene : ClassroomScene;
+  const esL418 = aula.codigo === "L-418";
+  const Scene = esL418 ? L418Scene : esA1001 ? A1001Scene : ClassroomScene;
   const lay = useMemo(() => buildLayout(aula), [aula]);
-  const estimada = esA1001 || lay.estimada;
+  const estimada = esL418 || esA1001 || lay.estimada;
 
   return (
     <div
@@ -110,11 +117,12 @@ export function TwinViewer({
       )}
     >
       <Scene
-        key={sceneKey}
+        key={esL418 ? "L418" : sceneKey}
         aula={aula}
         capas={capas}
         selected={selected}
         onSelect={setSelected}
+        {...(esL418 ? { resetKey: sceneKey } : {})}
       />
 
       {/* top-left: back link (standalone) + badge */}
@@ -198,19 +206,39 @@ export function TwinViewer({
         </button>
       </aside>
 
+      {esL418 && (
+        <p className="pointer-events-none absolute bottom-12 right-3 max-w-[70%] rounded-md bg-black/65 px-2.5 py-1.5 text-right text-[11px] text-white/85 backdrop-blur">
+          <span className="block">
+            Entrada/salida: junto al tacho · Zona reservada: junto al
+            escritorio.
+          </span>
+          <span className="block">
+            Planta con entrante · recinto reservado cerrado (interior no
+            levantado).
+          </span>
+          <span className="block" data-testid="l418-geometry-version">
+            Fondo reservado: {L418_LAYOUT.reservado.z1.toFixed(1)} m · paso
+            exterior: {L418_LAYOUT.pasoExterior.toFixed(2)} m (estimados).
+          </span>
+        </p>
+      )}
+
       {/* sensor inspection panel */}
       {meta && selected && (
         <aside className="absolute right-3 top-14 w-64 rounded-lg border border-white/10 bg-black/70 p-3 text-sm text-white shadow-lg backdrop-blur">
           <h2 className="font-semibold">{meta.etiqueta}</h2>
           <p className="mt-1 text-xs text-white/65">{meta.descripcion}</p>
           <p className="mt-2 border-t border-white/10 pt-2 text-[11px] text-white/50">
-            Mediciones en vivo y zonas de peligro llegan en el nivel 3.
+            {esL418
+              ? "Nodo propuesto: ubicación de diseño, no instalación confirmada. Telemetría no conectada al backend."
+              : "Mediciones en vivo y zonas de peligro llegan en el nivel 3."}
           </p>
         </aside>
       )}
 
       <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-black/55 px-2.5 py-1.5 text-[11px] text-white/80 backdrop-blur">
-        Arrastra para orbitar · rueda para acercar · clic en un sensor para inspeccionarlo
+        Arrastra para orbitar · rueda para acercar · clic en un sensor para
+        inspeccionarlo
       </p>
     </div>
   );
